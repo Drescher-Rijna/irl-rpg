@@ -1,22 +1,48 @@
 'use client';
+
 import Link from 'next/link';
 import { useUserStore } from '@/store/useUserStore';
 import { useXPStore } from '@/store/useXPStore';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function Dashboard() {
   const user = useUserStore((state) => state.user);
   const setUser = useUserStore((state) => state.setUser);
   const xp = useXPStore((state) => state.xp);
   const level = useXPStore((state) => state.level);
+  const setXP = useXPStore((state) => state.setXP);
   const router = useRouter();
+
+  // Fetch XP & level from DB when user logs in
+  useEffect(() => {
+    const fetchXP = async () => {
+      if (!user?.id) return;
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('xp_total, level')
+        .eq('id', user.id)
+        .single();
+
+      if (!error && data) {
+        // Convert total XP into XP in current level
+        const xpInLevel = data.xp_total % (data.level * 100);
+        setXP(xpInLevel, data.level);
+      }
+    };
+
+    fetchXP();
+  }, [user, setXP]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     router.push('/auth/signin');
   };
+
+  const progressPercent = Math.min((xp / (level * 100)) * 100, 100);
 
   return (
     <div className="p-4 max-w-xl mx-auto">
@@ -27,8 +53,8 @@ export default function Dashboard() {
         <p>Level: {level}</p>
         <div className="w-full bg-gray-300 rounded-full h-4">
           <div
-            className="bg-blue-500 h-4 rounded-full"
-            style={{ width: `${(xp / (level * 100)) * 100}%` }}
+            className="bg-blue-500 h-4 rounded-full transition-all duration-300"
+            style={{ width: `${progressPercent}%` }}
           ></div>
         </div>
         <p className="text-sm mt-1">{xp} XP / {level * 100} XP</p>

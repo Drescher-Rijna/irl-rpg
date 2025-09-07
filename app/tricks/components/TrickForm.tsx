@@ -51,14 +51,17 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
 
     setLoading(true);
     setMessage('');
-
+    console.log(1)
     try {
+      console.log(2)
       // Insert trick
       const { data: trick, error: trickError } = await supabase
         .from('tricks')
-        .insert([{ name, stance, category_id: 'YOUR_SKATEBOARD_CATEGORY_ID' }])
-        .select()
+        .insert([{ name, stance, category_id: 'fb2a123c-d3de-4bfb-a767-019f3585b131' }])
+        .select('id, name, stance, category_id')
         .single();
+
+      console.log(trick, trickError);
 
       if (trickError) throw trickError;
 

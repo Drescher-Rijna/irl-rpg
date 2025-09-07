@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/store/useUserStore';
+import { useXPStore } from '@/store/useXPStore';
 
 type Obstacle = {
   id: string;
@@ -18,6 +20,7 @@ type Trick = {
 };
 
 const TrickLogForm: React.FC = () => {
+  const user = useUserStore((state) => state.user);
   const [tricks, setTricks] = useState<Trick[]>([]);
   const [selectedTrick, setSelectedTrick] = useState<string>('');
   const [selectedObstacles, setSelectedObstacles] = useState<string[]>([]);
@@ -25,6 +28,7 @@ const TrickLogForm: React.FC = () => {
   const [landed, setLanded] = useState<number>(0);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const addXP = useXPStore((state) => state.addXP);
 
   // Fetch all tricks with obstacles
   useEffect(() => {
@@ -54,6 +58,47 @@ const TrickLogForm: React.FC = () => {
     fetchTricks();
   }, []);
 
+  // Log trick API call
+  const handleTrickLog = async (
+    userId: string,
+    trickId: string,
+    obstacleIds: string[],
+    obstacleScoresArray: number[],
+    attempts: number,
+    landed: number
+  ) => {
+    if (!userId || !trickId || obstacleIds.length === 0) return;
+
+    const consistency =
+      obstacleScoresArray.reduce((sum, score) => sum + score, 0) /
+      obstacleScoresArray.length;
+
+    try {
+      const res = await fetch('/api/tricks/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          trickId,
+          obstacleIds,
+          obstacleScores: obstacleScoresArray,
+          attempts,
+          landed,
+          consistency
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to log trick');
+
+      console.log('API Response:', data);
+      addXP(data.earnedXP);
+    } catch (err: any) {
+      console.error(err.message);
+    }
+  };
+
+
   const handleTrickChange = (trickId: string) => {
     setSelectedTrick(trickId);
     const trick = tricks.find(t => t.id === trickId);
@@ -62,10 +107,12 @@ const TrickLogForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTrick || selectedObstacles.length === 0) {
+
+    if (!user || !selectedTrick || selectedObstacles.length === 0) {
       setMessage('Select a trick and at least one obstacle.');
       return;
     }
+
     if (landed > attempts) {
       setMessage('Landed cannot be greater than attempts.');
       return;
@@ -75,45 +122,19 @@ const TrickLogForm: React.FC = () => {
     setMessage('');
 
     try {
-      // Insert into trick_logs for each obstacle
-      const logInserts = selectedObstacles.map(obstacle_id => ({
-        trick_id: selectedTrick,
-        obstacle_id,
-        attempts,
-        landed
-      }));
-      const { error: logError } = await supabase.from('trick_logs').insert(logInserts);
-      if (logError) throw logError;
+      // Calculate score per obstacle (0–10 scale)
+      const obstacleScoresArray = selectedObstacles.map(
+        () => Math.round((landed / attempts) * 10)
+      );
 
-      // Update trick_consistency
-      for (const obstacle_id of selectedObstacles) {
-        // Fetch current consistency
-        const { data: consistencyData, error: consistencyError } = await supabase
-          .from('trick_consistency')
-          .select('*')
-          .eq('trick_id', selectedTrick)
-          .eq('obstacle_id', obstacle_id)
-          .single();
-
-        if (consistencyError && consistencyError.code !== 'PGRST116') throw consistencyError;
-
-        const newScore = Math.round((landed / attempts) * 10);
-
-        if (consistencyData) {
-          await supabase
-            .from('trick_consistency')
-            .update({ score: newScore, updated_at: new Date().toISOString() })
-            .eq('id', consistencyData.id);
-        } else {
-          await supabase
-            .from('trick_consistency')
-            .insert({ trick_id: selectedTrick, obstacle_id, score: newScore });
-        }
-      }
+      // Call API to log trick, update tier, and XP
+      await handleTrickLog(user.id, selectedTrick, selectedObstacles, obstacleScoresArray, attempts, landed);
 
       setMessage('Session logged successfully!');
       setAttempts(1);
       setLanded(0);
+      setSelectedObstacles([]);
+      setSelectedTrick('');
     } catch (err: any) {
       console.error(err);
       setMessage(err.message || 'Something went wrong.');
