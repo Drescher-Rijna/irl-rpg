@@ -86,6 +86,12 @@ export default function Dashboard() {
             >
               Sign Out
             </button>
+            <Link
+              href="/skate/challenges"
+              className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600"
+            >
+              My Challenges
+            </Link>
           </>
         )}
       </div>

@@ -25,7 +25,6 @@ export const generateDailyChallenges = (
   const available = tricks.filter(
     t => !completedTrickIds.includes(t.id) || t.tier > 1
   );
-  console.log('Available Tricks:', tricks);
 
   if (!available.length) return [];
 
@@ -120,7 +119,6 @@ export const generateDailyChallenges = (
     }
   }
 
-  console.log('Generated Challenges:', challenges);
   return challenges.sort(() => Math.random() - 0.5);
 };
 

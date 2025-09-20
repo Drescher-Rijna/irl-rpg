@@ -8,105 +8,152 @@ export async function POST(req: Request) {
     const { userId } = body;
     if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
-   // 1. Fetch tricks with obstacles
-const { data: tricksData, error: tricksError } = await supabase
-  .from('tricks')
-  .select(`
-    id,
-    name,
-    tier,
-    trick_obstacles (
-      obstacle_id,
-      obstacles (id, name, type, difficulty)
-    )
-  `);
+    // 1️⃣ Fetch tricks with obstacles
+    const { data: tricksData, error: tricksError } = await supabase
+      .from('tricks')
+      .select(`
+        id,
+        name,
+        tier,
+        trick_obstacles (
+          obstacle_id,
+          obstacles (id, name, type, difficulty)
+        )
+      `);
+    if (tricksError) throw tricksError;
 
-if (tricksError) throw tricksError;
+    // 2️⃣ Fetch consistency separately
+    const { data: consistencyData, error: consistencyError } = await supabase
+      .from('trick_consistency')
+      .select('trick_id, obstacle_id, score');
+    if (consistencyError) throw consistencyError;
 
-// 2. Fetch consistency separately
-const { data: consistencyData, error: consistencyError } = await supabase
-  .from('trick_consistency')
-  .select('trick_id, obstacle_id, score');
+    // 3️⃣ Merge consistency into tricks
+    const tricks = tricksData.map(trick => {
+      const relatedConsistency = consistencyData.filter(c => c.trick_id === trick.id);
+      const avgConsistency = relatedConsistency.length
+        ? relatedConsistency.reduce((sum, c) => sum + c.score, 0) / relatedConsistency.length
+        : 0;
 
-if (consistencyError) throw consistencyError;
+      return {
+        id: trick.id,
+        name: trick.name,
+        tier: trick.tier,
+        consistency: avgConsistency,
+      };
+    });
 
-// 3. Merge into one array
-const tricks = tricksData.map(trick => {
-  const relatedConsistency = consistencyData.filter(c => c.trick_id === trick.id);
-  const avgConsistency = relatedConsistency.length
-    ? relatedConsistency.reduce((sum, c) => sum + c.score, 0) / relatedConsistency.length
-    : 0;
-
-  return {
-    id: trick.id,
-    name: trick.name,
-    tier: trick.tier,
-    consistency: avgConsistency,
-  };
-});
-
-console.log('Fetched Tricks with consistency:', tricks);
-
-    // 2️⃣ Fetch existing challenges
+    // 4️⃣ Fetch existing challenges for user
     const { data: existing, error: existingError } = await supabase
       .from('challenges')
       .select('*')
       .eq('user_id', userId);
     if (existingError) return NextResponse.json({ error: 'Failed to fetch challenges' }, { status: 500 });
 
-    // 3️⃣ Determine how many challenges we can generate per type
+    // 5️⃣ Count current challenges
     const MAX_DAILY = 5;
     const MAX_LINE = 2;
     const MAX_COMBO = 2;
     const MAX_BOSS = 1;
 
-    const dailyCount = existing.filter(c => c.type === 'daily').length;
-    const lineCount = existing.filter(c => c.type === 'line').length;
-    const comboCount = existing.filter(c => c.type === 'combo').length;
-    const bossCount = existing.filter(c => c.type === 'boss').length;
+    const dailyCount = existing.filter(c => c.type === 'daily' && !c.is_completed).length;
+    const lineCount = existing.filter(c => c.type === 'line' && !c.is_completed).length;
+    const comboCount = existing.filter(c => c.type === 'combo' && !c.is_completed).length;
+    const bossCount = existing.filter(c => c.type === 'boss' && !c.is_completed).length;
 
     const newChallenges = [];
-console.log(dailyCount)
-    // 4️⃣ Generate Daily Challenges
+
+    // 6️⃣ Prepare existing trick IDs per type to prevent duplicates
+    const today = new Date().toISOString().split('T')[0];
+    const existingDailyTrickIds = existing
+      .filter(c => c.type === 'daily' && !c.is_completed && c.date_assigned === today)
+      .map(c => c.trick_id);
+    const existingLineTrickIds = existing
+      .filter(c => c.type === 'line' && !c.is_completed)
+      .map(c => c.trick_id);
+    const existingComboTrickIds = existing
+      .filter(c => c.type === 'combo' && !c.is_completed)
+      .map(c => c.trick_id);
+    const existingBossTrickIds = existing
+      .filter(c => c.type === 'boss' && !c.is_completed)
+      .map(c => c.trick_id);
+
+
+    // 7️⃣ Generate Daily Challenges
+    console.log('Existing Daily Trick IDs:', dailyCount);
     if (dailyCount < MAX_DAILY) {
-      console.log(1)
-      const dailyToGen = MAX_DAILY - dailyCount;
-      const daily = generateDailyChallenges(tricks, existing.map(c => c.trick_id), dailyToGen);
-      newChallenges.push(...daily);
+      const availableDaily = tricks.filter(t => !existingDailyTrickIds.includes(t.id));
+      console.log('Existing Daily Trick IDs:', tricks);
+      if (availableDaily.length > 0) {
+        console.log('Generating daily challenges from pool:', availableDaily);
+        const dailyToGen = Math.min(MAX_DAILY - dailyCount, availableDaily.length);
+        const daily = generateDailyChallenges(availableDaily, existingDailyTrickIds, dailyToGen);
+        newChallenges.push(...daily);
+      }
     }
 
-    // 5️⃣ Generate Boss
+    // 8️⃣ Generate Boss Challenges
     if (bossCount < MAX_BOSS) {
-      console.log(2)
-      const boss = await generateBossChallenge(tricks, existing);
-      if (boss) newChallenges.push(boss);
+      const availableBoss = tricks.filter(t => !existingBossTrickIds.includes(t.id));
+      if (availableBoss.length > 0) {
+        const boss = await generateBossChallenge(availableBoss, existing);
+        if (boss) newChallenges.push(boss);
+      }
     }
 
-    // 6️⃣ Generate Combo
+    // 9️⃣ Generate Combo Challenges
     if (comboCount < MAX_COMBO) {
-      console.log(3)
-      const combo = await generateComboChallenge(tricks, existing);
+      const combo = await generateComboChallenge(tricks, existing.filter(c => c.type === 'combo'));
       if (combo) newChallenges.push(combo);
     }
 
-    // 7️⃣ Generate Line
+    // 🔟 Generate Line Challenges
     if (lineCount < MAX_LINE) {
-      console.log(4)
-      const line = await generateLineChallenge(tricks, existing);
+      const line = await generateLineChallenge(tricks, existing.filter(c => c.type === 'line'));
       if (line) newChallenges.push(line);
     }
 
-    // 8️⃣ Persist challenges
+    // 1️⃣1️⃣ Persist new challenges if any
     if (newChallenges.length > 0) {
-      await supabase.from('challenges').insert(newChallenges.map(c => ({
-        ...c,
-        user_id: userId
-      })));
+      await supabase.from('challenges').insert(
+        newChallenges.map(c => ({ ...c, user_id: userId }))
+      );
     }
 
     return NextResponse.json({ created: newChallenges.length, challenges: newChallenges });
   } catch (err: any) {
     console.error(err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const userId = searchParams.get('userId');
+  if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+
+  const { data, error } = await supabase
+    .from('challenges')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date_assigned', { ascending: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ challenges: data });
+}
+
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  const { id } = params;
+
+  if (!id) return NextResponse.json({ error: 'Missing challenge ID' }, { status: 400 });
+
+  try {
+    const { error } = await supabase.from('challenges').delete().eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ message: 'Challenge deleted' });
+  } catch (err: any) {
+    console.error(err);
+    return NextResponse.json({ error: 'Failed to delete challenge' }, { status: 500 });
   }
 }
