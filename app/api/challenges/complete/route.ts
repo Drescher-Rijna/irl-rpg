@@ -15,24 +15,18 @@ export async function POST(req: Request) {
       .select('*')
       .eq('id', challengeId)
       .single();
-    if (challengeError || !challenge) {
-      return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
-    }
-    if (challenge.is_completed) {
-      return NextResponse.json({ error: 'Challenge already completed' }, { status: 400 });
-    }
+    if (challengeError || !challenge) return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    if (challenge.is_completed) return NextResponse.json({ error: 'Challenge already completed' }, { status: 400 });
 
     // 2️⃣ Mark challenge complete
     await supabase.from('challenges').update({ is_completed: true }).eq('id', challengeId);
 
-    // 3️⃣ Update trick consistency (if relevant)
+    // 3️⃣ Update trick consistency (per obstacle)
     let newScore: number | null = null;
-   
+
     if (challenge.unlock_condition.type === 'consistency' && challenge.unlock_condition.target) {
-      // Example: "reach 7/10 consistency"
       newScore = challenge.unlock_condition.target;
     } else if (challenge.unlock_condition.attempts && challenge.unlock_condition.lands) {
-      // Example: "land X times in Y attempts"
       newScore = Math.floor((challenge.unlock_condition.lands / challenge.unlock_condition.attempts) * 10);
       if (newScore > 10) newScore = 10;
     }
@@ -44,21 +38,24 @@ export async function POST(req: Request) {
           trick_id: challenge.trick_id,
           obstacle_id: challenge.obstacle_id,
           score: newScore,
+          tier:
+            newScore >= 7 ? 1 :
+            newScore >= 4 ? 2 : 3,
         }, { onConflict: 'trick_id, obstacle_id' });
 
-      // 🔄 Recalculate overall trick tier as average of consistencies
+      // 🔄 Recalculate overall trick tier using only obstacles with score > 0
       const { data: consistencies } = await supabase
         .from('trick_consistency')
         .select('score')
         .eq('trick_id', challenge.trick_id);
 
       if (consistencies && consistencies.length > 0) {
-        const avgScore =
-          consistencies.reduce((sum, c) => sum + c.score, 0) / consistencies.length;
+        const validScores = consistencies.filter(c => c.score > 0).map(c => c.score);
+        const avgScore = validScores.reduce((sum, s) => sum + s, 0) / validScores.length;
 
-        let newTier = 1;
-        if (avgScore >= 7) newTier = 3;
-        else if (avgScore >= 4) newTier = 2;
+        const newTier =
+          avgScore >= 7 ? 1 :
+          avgScore >= 4 ? 2 : 3;
 
         await supabase
           .from('tricks')
@@ -69,9 +66,7 @@ export async function POST(req: Request) {
 
     // 4️⃣ Update user XP
     const { data: user } = await supabase.from('users').select('*').eq('id', userId).single();
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const earnedXP = challenge.xp_reward || calculateXP(challenge.tier || 1, newScore || 1);
     const updatedUser = updateUserXP(user, earnedXP);

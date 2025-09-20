@@ -1,41 +1,36 @@
 type User = {
   id: string;
   xp_total: number;
-  xp_current: number;
+  xp_current: number; // XP toward next level
   level: number;
 };
 
+// Example scaling: XP required for next level increases by 50 per level
+const baseXPPerLevel = 100;
+
 export const calculateXP = (tier: number, consistency: number) => {
   const baseXP = 10;
-  const tierMultiplier: Record<number, number> = { 1: 1, 2: 1.5, 3: 2 };
-  const consistencyMultiplier = consistency / 10; // normalized to 0–1
-  return Math.floor(baseXP * (tierMultiplier[tier] || 1) * consistencyMultiplier);
-};
-
-// progressive XP curve
-export const xpForLevel = (level: number) => {
-  const base = 500; // XP needed for level 1 → 2
-  const growth = 1.2; // 20% more required each level
-  return Math.floor(base * Math.pow(growth, level - 1));
+  const tierMultiplier = { 1: 1, 2: 1.5, 3: 2 };
+  const consistencyMultiplier = consistency / 10;
+  return Math.floor(baseXP * tierMultiplier[tier] * consistencyMultiplier);
 };
 
 export const updateUserXP = (user: User, earnedXP: number) => {
-  let total = user.xp_total + earnedXP;
-  let current = user.xp_current + earnedXP;
+  const totalXP = user.xp_total + earnedXP;
   let level = user.level;
+  let xpForNextLevel = baseXPPerLevel + (level - 1) * 50;
+  let xpCurrent = user.xp_current + earnedXP;
 
-  let required = xpForLevel(level);
-
-  while (current >= required) {
-    current -= required;
-    level++;
-    required = xpForLevel(level);
+  while (xpCurrent >= xpForNextLevel) {
+    xpCurrent -= xpForNextLevel;
+    level += 1;
+    xpForNextLevel = baseXPPerLevel + (level - 1) * 50;
   }
 
   return {
     ...user,
-    xp_total: total,
-    xp_current: current,
+    xp_total: totalXP,
+    xp_current: xpCurrent,
     level,
   };
 };
