@@ -30,16 +30,26 @@ export async function POST(req: Request) {
 
     // 3️⃣ Merge consistency into tricks
     const tricks = tricksData.map(trick => {
-      const relatedConsistency = consistencyData.filter(c => c.trick_id === trick.id);
-      const avgConsistency = relatedConsistency.length
-        ? relatedConsistency.reduce((sum, c) => sum + c.score, 0) / relatedConsistency.length
-        : 0;
+  const relatedConsistency = consistencyData.filter(c => c.trick_id === trick.id);
+  const avgConsistency = relatedConsistency.length
+    ? relatedConsistency.reduce((sum, c) => sum + c.score, 0) / relatedConsistency.length
+    : 0;
+
+  // Flatten obstacles from trick_obstacles
+  const obstacles = trick.trick_obstacles?.map(to => ({
+        id: to.obstacle_id,
+        name: to.obstacles.name,
+        type: to.obstacles.type,
+        difficulty: to.obstacles.difficulty,
+        consistency: relatedConsistency.find(c => c.obstacle_id === to.obstacle_id)?.score || 0,
+      })) || [];
 
       return {
         id: trick.id,
         name: trick.name,
         tier: trick.tier,
         consistency: avgConsistency,
+        obstacles,
       };
     });
 
@@ -80,12 +90,9 @@ export async function POST(req: Request) {
 
 
     // 7️⃣ Generate Daily Challenges
-    console.log('Existing Daily Trick IDs:', dailyCount);
     if (dailyCount < MAX_DAILY) {
       const availableDaily = tricks.filter(t => !existingDailyTrickIds.includes(t.id));
-      console.log('Existing Daily Trick IDs:', tricks);
       if (availableDaily.length > 0) {
-        console.log('Generating daily challenges from pool:', availableDaily);
         const dailyToGen = Math.min(MAX_DAILY - dailyCount, availableDaily.length);
         const daily = generateDailyChallenges(availableDaily, existingDailyTrickIds, dailyToGen);
         newChallenges.push(...daily);

@@ -86,7 +86,6 @@ export function ChallengeList() {
     activeChallenges.filter(c => c.type === 'boss').length < MAX_BOSS;
 
   if (loading) return <p>Loading challenges...</p>;
-  if (!challenges.length) return <p>No active challenges. Come back tomorrow!</p>;
 
   return (
     <div className="space-y-6">

@@ -27,12 +27,13 @@ export async function POST(req: Request) {
 
     // 3️⃣ Update trick consistency (if relevant)
     let newScore: number | null = null;
-    if (challenge.consistency_target) {
+   
+    if (challenge.unlock_condition.type === 'consistency' && challenge.unlock_condition.target) {
       // Example: "reach 7/10 consistency"
-      newScore = challenge.consistency_target;
-    } else if (challenge.attempts && challenge.lands) {
+      newScore = challenge.unlock_condition.target;
+    } else if (challenge.unlock_condition.attempts && challenge.unlock_condition.lands) {
       // Example: "land X times in Y attempts"
-      newScore = Math.floor((challenge.lands / challenge.attempts) * 10);
+      newScore = Math.floor((challenge.unlock_condition.lands / challenge.unlock_condition.attempts) * 10);
       if (newScore > 10) newScore = 10;
     }
 
