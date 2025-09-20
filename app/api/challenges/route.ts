@@ -1,102 +1,112 @@
-// /api/challenges/route.ts
 import { supabase } from '@/lib/supabase';
+import { generateDailyChallenges, generateBossChallenge, generateComboChallenge, generateLineChallenge } from '@/lib/challenges';
 import { NextResponse } from 'next/server';
-import { fetchAllTricks } from '@/lib/tricks';
-import { generateDailyChallenges } from '@/lib/challenges';
-import { v4 as uuidv4 } from 'uuid';
-
-type ChallengeCategory = 'daily' | 'combo' | 'line' | 'boss';
-
-const MAX_CHALLENGES = {
-  daily: 5,
-  combo: 2,
-  line: 2,
-  boss: 1
-};
-
-// XP scaling per tier
-const XP_PER_TIER = [0, 50, 100, 150]; // index = tier
 
 export async function POST(req: Request) {
   try {
-    const { userId, generateType }: { userId: string; generateType?: ChallengeCategory } = await req.json();
+    const body = await req.json();
+    const { userId } = body;
     if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
-    // Fetch user
-    const { data: user } = await supabase.from('users').select('*').eq('id', userId).single();
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+   // 1. Fetch tricks with obstacles
+const { data: tricksData, error: tricksError } = await supabase
+  .from('tricks')
+  .select(`
+    id,
+    name,
+    tier,
+    trick_obstacles (
+      obstacle_id,
+      obstacles (id, name, type, difficulty)
+    )
+  `);
 
-    // Fetch current challenges for the user
-    const { data: existingChallenges } = await supabase
+if (tricksError) throw tricksError;
+
+// 2. Fetch consistency separately
+const { data: consistencyData, error: consistencyError } = await supabase
+  .from('trick_consistency')
+  .select('trick_id, obstacle_id, score');
+
+if (consistencyError) throw consistencyError;
+
+// 3. Merge into one array
+const tricks = tricksData.map(trick => {
+  const relatedConsistency = consistencyData.filter(c => c.trick_id === trick.id);
+  const avgConsistency = relatedConsistency.length
+    ? relatedConsistency.reduce((sum, c) => sum + c.score, 0) / relatedConsistency.length
+    : 0;
+
+  return {
+    id: trick.id,
+    name: trick.name,
+    tier: trick.tier,
+    consistency: avgConsistency,
+  };
+});
+
+console.log('Fetched Tricks with consistency:', tricks);
+
+    // 2️⃣ Fetch existing challenges
+    const { data: existing, error: existingError } = await supabase
       .from('challenges')
       .select('*')
-      .eq('user_id', userId)
-      .eq('is_completed', false);
+      .eq('user_id', userId);
+    if (existingError) return NextResponse.json({ error: 'Failed to fetch challenges' }, { status: 500 });
 
-    // Check if daily generation already happened today
-    const today = new Date().toISOString().slice(0, 10);
-    const todaysDaily = existingChallenges?.filter(c => c.type === 'daily' && c.date_assigned === today) || [];
-    
-    const response: any = { generated: [] };
+    // 3️⃣ Determine how many challenges we can generate per type
+    const MAX_DAILY = 5;
+    const MAX_LINE = 2;
+    const MAX_COMBO = 2;
+    const MAX_BOSS = 1;
 
-    // --- DAILY CHALLENGES ---
-    if (!generateType || generateType === 'daily') {
-      const dailyCount = existingChallenges?.filter(c => c.type === 'daily').length || 0;
-      if (dailyCount < MAX_CHALLENGES.daily) {
-        const tricks = await fetchAllTricks(); // all tricks with tier & consistency
-        const completedTrickIds = []; // could also fetch user's completed tricks
+    const dailyCount = existing.filter(c => c.type === 'daily').length;
+    const lineCount = existing.filter(c => c.type === 'line').length;
+    const comboCount = existing.filter(c => c.type === 'combo').length;
+    const bossCount = existing.filter(c => c.type === 'boss').length;
 
-        const dailyChallenges = generateDailyChallenges(tricks, completedTrickIds, MAX_CHALLENGES.daily - dailyCount);
-
-        if (dailyChallenges.length) {
-          const inserts = dailyChallenges.map(dc => ({
-            id: uuidv4(),
-            user_id: userId,
-            type: 'daily',
-            trick_id: dc.trick_id,
-            name: dc.name,
-            description: `Land ${dc.name} ${dc.tier === 1 ? 7 : dc.tier === 2 ? 5 : 3} out of 10 times`,
-            tier: dc.tier,
-            xp_reward: dc.xp_reward,
-            is_manual: false,
-            date_assigned: today
-          }));
-
-          await supabase.from('challenges').insert(inserts);
-          response.generated.push(...inserts);
-        }
-      }
+    const newChallenges = [];
+console.log(dailyCount)
+    // 4️⃣ Generate Daily Challenges
+    if (dailyCount < MAX_DAILY) {
+      console.log(1)
+      const dailyToGen = MAX_DAILY - dailyCount;
+      const daily = generateDailyChallenges(tricks, existing.map(c => c.trick_id), dailyToGen);
+      newChallenges.push(...daily);
     }
 
-    // --- COMBO, LINE, BOSS (manual or limited auto) ---
-    const categories: ChallengeCategory[] = ['combo', 'line', 'boss'];
-    for (const cat of categories) {
-      if (!generateType || generateType === cat) {
-        const count = existingChallenges?.filter(c => c.type === cat).length || 0;
-        if (count < MAX_CHALLENGES[cat]) {
-          // TODO: implement proper generation logic for combo/line/boss
-          // For now we just stub a challenge
-          const insert = {
-            id: uuidv4(),
-            user_id: userId,
-            type: cat,
-            name: `${cat.toUpperCase()} Challenge`,
-            description: 'Complete this challenge',
-            tier: 1,
-            difficulty: 1,
-            xp_reward: 100,
-            is_manual: false,
-            date_assigned: today
-          };
-          await supabase.from('challenges').insert([insert]);
-          response.generated.push(insert);
-        }
-      }
+    // 5️⃣ Generate Boss
+    if (bossCount < MAX_BOSS) {
+      console.log(2)
+      const boss = await generateBossChallenge(tricks, existing);
+      if (boss) newChallenges.push(boss);
     }
 
-    return NextResponse.json(response);
+    // 6️⃣ Generate Combo
+    if (comboCount < MAX_COMBO) {
+      console.log(3)
+      const combo = await generateComboChallenge(tricks, existing);
+      if (combo) newChallenges.push(combo);
+    }
+
+    // 7️⃣ Generate Line
+    if (lineCount < MAX_LINE) {
+      console.log(4)
+      const line = await generateLineChallenge(tricks, existing);
+      if (line) newChallenges.push(line);
+    }
+
+    // 8️⃣ Persist challenges
+    if (newChallenges.length > 0) {
+      await supabase.from('challenges').insert(newChallenges.map(c => ({
+        ...c,
+        user_id: userId
+      })));
+    }
+
+    return NextResponse.json({ created: newChallenges.length, challenges: newChallenges });
   } catch (err: any) {
     console.error(err);
-    return NextResponse.json({ error: 'Failed to generate challenges' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
