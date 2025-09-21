@@ -2,17 +2,23 @@
 
 import { useEffect, useState } from 'react';
 import { useUserStore } from '@/store/useUserStore';
+import ChallengeItem from './ChallengeItem';
+import XPLevelModal from '@/components/modals/XpLevelModal';
+import TrickCreationModal from '@/components/modals/TrickCreationModal';
+import DailyLandsModal from '@/components/modals/DailyLandsModal';
 
 type Challenge = {
   id: string;
-  type: 'daily' | 'boss' | 'line' | 'combo';
+  type: 'daily' | 'boss' | 'line' | 'combo' | 'initial';
   name: string;
   description: string;
   tier: number;
   difficulty: number;
   xp_reward: number;
   is_completed: boolean;
-  date_assigned: string;
+  failed?: boolean;
+  trick_id?: string;
+  obstacle_id?: string;
 };
 
 export function ChallengeList() {
@@ -25,6 +31,26 @@ export function ChallengeList() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [xpModalData, setXPModalData] = useState<null | {
+    earnedXP: number;
+    bonusXP?: number;
+    projectedXP: number;
+    projectedLevel: number;
+    wildSlotAwarded: boolean;
+  }>(null);
+
+  const [trickModalData, setTrickModalData] = useState<null | {
+    challengeId: string;
+    challengeType: string;
+  }>(null);
+
+  const [dailyLandsData, setDailyLandsData] = useState<null | {
+    challengeId: string;
+    trickId: string;
+    obstacleId: string;
+  }>(null);
+
+  // Fetch challenges
   const fetchChallenges = async () => {
     if (!user?.id) return;
     setLoading(true);
@@ -39,46 +65,85 @@ export function ChallengeList() {
     }
   };
 
-  useEffect(() => {
-    fetchChallenges();
-  }, [user]);
+  useEffect(() => { fetchChallenges(); }, [user]);
 
-  const handleComplete = async (challengeId: string) => {
-    try {
-      const res = await fetch('/api/challenges/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, challengeId }),
+  // Complete daily/initial with lands
+  const handleCompleteWithLands = async (challengeId: string, landsCompleted: number, attempts: number) => {
+    const res = await fetch('/api/challenges/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user?.id, challengeId, landsCompleted, attempts })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setChallenges(prev =>
+        prev.map(c =>
+          c.id === challengeId
+            ? { ...c, is_completed: true, failed: data.failed }
+            : c
+        )
+      );
+      setXPModalData({
+        earnedXP: data.earnedXP,
+        bonusXP: data.bonusXP,
+        projectedXP: data.projectedXP,
+        projectedLevel: data.projectedLevel,
+        wildSlotAwarded: data.willGetWildSlot
       });
-      const data = await res.json();
-      if (res.ok) {
-        setChallenges(prev =>
-          prev.map(c => c.id === challengeId ? { ...c, is_completed: true } : c)
-        );
-        console.log('XP earned:', data.earnedXP);
-      } else {
-        console.error('Complete failed:', data.error);
-      }
-    } catch (err) {
-      console.error('Complete request failed:', err);
+      setDailyLandsData(null);
+    } else {
+      console.error('Complete with lands failed:', data.error);
+    }
+  };
+
+  const handleComplete = async (challenge: Challenge) => {
+    if (!user?.id) return;
+
+    switch(challenge.type) {
+      case 'daily':
+      case 'initial':
+        if (challenge.trick_id && challenge.obstacle_id) {
+          setDailyLandsData({ challengeId: challenge.id, trickId: challenge.trick_id, obstacleId: challenge.obstacle_id });
+        }
+        break;
+
+      case 'boss':
+      case 'line':
+      case 'combo':
+        const res = await fetch('/api/challenges/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, challengeId: challenge.id })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setChallenges(prev =>
+            prev.map(c => c.id === challenge.id ? { ...c, is_completed: true } : c)
+          );
+          setXPModalData({
+            earnedXP: data.earnedXP,
+            projectedXP: data.projectedXP || (user?.xp_current || 0) + data.earnedXP,
+            projectedLevel: data.level,
+            wildSlotAwarded: data.wildSlotAwarded || false
+          });
+        }
+        if (challenge.type === 'combo') setTrickModalData({ challengeId: challenge.id, challengeType: 'combo' });
+        break;
+
+      default:
+        console.warn('Unknown challenge type', challenge.type);
     }
   };
 
   const handleDelete = async (challengeId: string) => {
     try {
       const res = await fetch(`/api/challenges/${challengeId}`, { method: 'DELETE' });
-      if (res.ok) {
-        setChallenges(prev => prev.filter(c => c.id !== challengeId));
-      }
-    } catch (err) {
-      console.error('Delete request failed:', err);
-    }
+      if (res.ok) setChallenges(prev => prev.filter(c => c.id !== challengeId));
+    } catch (err) { console.error('Delete request failed:', err); }
   };
 
-  // Separate active and completed
   const activeChallenges = challenges.filter(c => !c.is_completed);
   const completedChallenges = challenges.filter(c => c.is_completed);
-
   const canGenerateMore =
     activeChallenges.filter(c => c.type === 'daily').length < MAX_DAILY ||
     activeChallenges.filter(c => c.type === 'line').length < MAX_LINE ||
@@ -89,90 +154,26 @@ export function ChallengeList() {
 
   return (
     <div className="space-y-6">
-      {/* Active Challenges */}
       <div>
         <h2 className="text-xl font-bold mb-2">Active Challenges</h2>
         <div className="space-y-4">
-          {activeChallenges.map((c) => (
-            <div key={c.id} className="border rounded-lg p-4 shadow-sm bg-white hover:shadow-md transition">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-lg font-semibold">{c.name}</h3>
-                <span
-                  className={`text-xs px-2 py-1 rounded-full ${
-                    c.type === 'daily'
-                      ? 'bg-blue-100 text-blue-800'
-                      : c.type === 'boss'
-                      ? 'bg-red-100 text-red-800'
-                      : c.type === 'line'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-purple-100 text-purple-800'
-                  }`}
-                >
-                  {c.type.toUpperCase()}
-                </span>
-              </div>
-              <p className="text-sm text-gray-700 mb-2">{c.description}</p>
-              <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>Tier {c.tier}</span>
-                <span>Difficulty {c.difficulty}</span>
-                <span>XP: {c.xp_reward}</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleComplete(c.id)}
-                  className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
-                >
-                  Complete
-                </button>
-                <button
-                  onClick={() => handleDelete(c.id)}
-                  className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
+          {activeChallenges.map(c => (
+            <ChallengeItem key={c.id} challenge={c} onComplete={handleComplete} onDelete={handleDelete} />
           ))}
         </div>
       </div>
 
-      {/* Completed Challenges */}
       {completedChallenges.length > 0 && (
         <div>
           <h2 className="text-xl font-bold mb-2">Completed Challenges</h2>
           <div className="space-y-4">
-            {completedChallenges.map((c) => (
-              <div key={c.id} className="border rounded-lg p-4 shadow-sm bg-gray-50">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-semibold">{c.name}</h3>
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      c.type === 'daily'
-                        ? 'bg-blue-100 text-blue-800'
-                        : c.type === 'boss'
-                        ? 'bg-red-100 text-red-800'
-                        : c.type === 'line'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-purple-100 text-purple-800'
-                    }`}
-                  >
-                    {c.type.toUpperCase()}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-700 mb-2">{c.description}</p>
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>Tier {c.tier}</span>
-                  <span>Difficulty {c.difficulty}</span>
-                  <span>XP: {c.xp_reward}</span>
-                  <span className="text-green-600 font-medium">✓ Completed</span>
-                </div>
-              </div>
+            {completedChallenges.map(c => (
+              <ChallengeItem key={c.id} challenge={c} onComplete={handleComplete} onDelete={handleDelete} />
             ))}
           </div>
         </div>
       )}
 
-      {/* Generate More Button */}
       {canGenerateMore && (
         <div className="mt-4">
           <button
@@ -185,20 +186,60 @@ export function ChallengeList() {
                   body: JSON.stringify({ userId: user.id }),
                 });
                 const data = await res.json();
-                if (res.ok && data.challenges) {
-                  setChallenges(prev => [...prev, ...data.challenges]);
-                }
+                if (res.ok && data.challenges) setChallenges(prev => [...prev, ...data.challenges]);
               } catch (err) {
                 console.error('Failed to generate more challenges:', err);
-              } finally {
-                setLoading(false);
-              }
+              } finally { setLoading(false); }
             }}
             className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
           >
             Generate More Challenges
           </button>
         </div>
+      )}
+
+      {xpModalData && (
+        <XPLevelModal
+          data={xpModalData}
+          onClose={() => setXPModalData(null)}
+          onConfirm={async () => {
+            await fetch('/api/users/xp/update', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                userId: user.id,
+                earnedXP: xpModalData.earnedXP + (xpModalData.bonusXP || 0),
+                wildSlotAwarded: xpModalData.wildSlotAwarded,
+              })
+            });
+            setXPModalData(null);
+            fetchChallenges();
+          }}
+        />
+      )}
+
+      {trickModalData && (
+        <TrickCreationModal
+          challengeId={trickModalData.challengeId}
+          type={trickModalData.challengeType}
+          onClose={() => setTrickModalData(null)}
+          onSuccess={() => { setTrickModalData(null); fetchChallenges(); }}
+        />
+      )}
+
+      {dailyLandsData && (
+        <DailyLandsModal
+          data={dailyLandsData}
+          onClose={() => setDailyLandsData(null)}
+          onSubmit={(landsCompleted, attempts) => {
+            const { challengeId } = dailyLandsData;
+            if (!challengeId || !user?.id) {
+              console.error('Missing userId or challengeId', { userId: user?.id, challengeId });
+              return;
+            }
+            handleCompleteWithLands(challengeId, Number(landsCompleted), Number(attempts));
+          }}
+        />
       )}
     </div>
   );

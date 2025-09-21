@@ -36,12 +36,10 @@ export const generateDailyChallenges = (
   const tier2 = available.filter(t => t.tier === 2);
   const tier3 = available.filter(t => t.tier === 3);
 
-  // Compute counts for distribution
   let tier1Count = Math.min(Math.ceil(totalChallenges * 0.7), tier1.length);
   let tier2Count = Math.min(Math.ceil(totalChallenges * 0.2), tier2.length);
   let tier3Count = Math.min(totalChallenges - tier1Count - tier2Count, tier3.length);
 
-  // Adjust if fewer tricks in a tier
   const totalSelected = tier1Count + tier2Count + tier3Count;
   if (totalSelected < totalChallenges) {
     const remaining = totalChallenges - totalSelected;
@@ -52,31 +50,26 @@ export const generateDailyChallenges = (
   const challenges: Challenge[] = [];
 
   const createDescription = (trick: Trick): { description: string; unlock: any; xp: number; difficulty: number; obstacle_id?: string } => {
-    const obstacle = trick.obstacles?.[0]; // pick obstacle for challenge
+    const obstacle = trick.obstacles?.[0]; // pick the first obstacle for daily
     const consistency = trick.consistency ?? 0;
 
     if (trick.consistency === undefined) {
-      // Brand new trick → baseline attempts
       const attempts = 10;
       const lands = 3;
       return {
-        description: `Attempt ${trick.name} ${attempts} times and land at least ${lands}`,
+        description: `Attempt ${trick.name}${obstacle ? ` on ${obstacle.name}` : ''} ${attempts} times and land at least ${lands}`,
         unlock: { type: 'attempts', attempts, lands },
         xp: 50,
         difficulty: 1,
         obstacle_id: obstacle?.id,
       };
     } else {
-      // Existing trick → push consistency higher
       let target = Math.min(10, Math.ceil(consistency + 1));
-
-      // Occasional maxed-out Tier 1 trick: skip 9/10–10/10 once in a while
       if (trick.tier === 1 && consistency >= 9 && Math.random() < 0.7) {
-        target = consistency; // keep current consistency
+        target = consistency;
       }
-
       return {
-        description: `Land ${trick.name} ${target}/10 times`,
+        description: `Land ${trick.name}${obstacle ? ` on ${obstacle.name}` : ''} ${target}/10 times`,
         unlock: { type: 'consistency', target },
         xp: 40 + target * 5,
         difficulty: trick.tier + (target > 7 ? 2 : 1),
@@ -109,20 +102,14 @@ export const generateDailyChallenges = (
   return challenges.sort(() => Math.random() - 0.5);
 };
 
-
-
-
-export const generateBossChallenge = (tricks: any[], existing: any[]): Challenge | null => {
-  // Filter tricks with consistency ≥6
+export const generateBossChallenge = (tricks: Trick[], existing: Challenge[]): Challenge | null => {
   const candidates = tricks.filter(t => t.obstacles?.some(o => o.consistency >= 6));
   if (!candidates.length) return null;
 
   const candidate = candidates.sort(() => Math.random() - 0.5)[0];
-
   const currentObstacle = candidate.obstacles.find(o => o.consistency >= 6);
   if (!currentObstacle) return null;
 
-  // Pick the next harder obstacle
   const harderObstacle = candidate.obstacles
     .filter(o => o.difficulty > currentObstacle.difficulty)
     .sort((a, b) => a.difficulty - b.difficulty)[0];
@@ -132,7 +119,7 @@ export const generateBossChallenge = (tricks: any[], existing: any[]): Challenge
   return {
     trick_id: candidate.id,
     name: `Boss Challenge: ${candidate.name}`,
-    description: `Land ${candidate.name} on ${harderObstacle.name}`,
+    description: `Land ${candidate.name} on ${harderObstacle.name}`, // obstacle included
     tier: candidate.tier,
     difficulty: candidate.tier + harderObstacle.difficulty,
     xp_reward: 200 + harderObstacle.difficulty * 20,
@@ -141,6 +128,7 @@ export const generateBossChallenge = (tricks: any[], existing: any[]): Challenge
     obstacle_id: harderObstacle.id,
   };
 };
+
 
 
 

@@ -51,9 +51,8 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
 
     setLoading(true);
     setMessage('');
-    console.log(1)
+    
     try {
-      console.log(2)
       // Insert trick
       const { data: trick, error: trickError } = await supabase
         .from('tricks')

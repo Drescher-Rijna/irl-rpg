@@ -68,11 +68,57 @@ export const fetchAllTricks = async (): Promise<Trick[]> => {
   return tricks;
 };
 
+/**
+ * Pure function: given scores, return tier
+ */
 export const calculateTier = (scores: number[]): number => {
   if (!scores.length) return 3; // default tier
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
 
   if (avg >= 7) return 1; // mastered
-  if (avg >= 3) return 2; // moderate
+  if (avg >= 4) return 2; // moderate
   return 3; // beginner
+};
+
+/**
+ * Fetch trick consistencies, calculate overall tier,
+ * and update the trick in DB.
+ */
+export const recalculateTrickTier = async (trickId: string) => {
+  const { data: consistencies, error } = await supabase
+    .from("trick_consistency")
+    .select("score, landed")
+    .eq("trick_id", trickId);
+
+  if (error) {
+    console.error("Failed to fetch consistencies:", error);
+    return;
+  }
+
+  // Use only landed = true
+  const validScores = consistencies?.filter(c => c.landed && c.score > 0) || [];
+
+  if (validScores.length === 0) {
+    console.log("No landed consistencies for trick:", trickId);
+    return;
+  }
+
+  // Extract just scores
+  const scores = validScores.map(c => c.score);
+
+  // Use pure function
+  const newTier = calculateTier(scores);
+
+  // Update DB
+  const { error: updateError } = await supabase
+    .from("tricks")
+    .update({ tier: newTier })
+    .eq("id", trickId);
+
+  if (updateError) {
+    console.error("Failed to update trick tier:", updateError);
+    return;
+  }
+
+  console.log(`Updated trick ${trickId} to tier ${newTier}`);
 };

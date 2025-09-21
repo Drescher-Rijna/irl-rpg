@@ -121,11 +121,20 @@ export async function POST(req: Request) {
     }
 
     // 1️⃣1️⃣ Persist new challenges if any
-    if (newChallenges.length > 0) {
-      await supabase.from('challenges').insert(
-        newChallenges.map(c => ({ ...c, user_id: userId }))
-      );
-    }
+  if (newChallenges.length > 0) {
+    await supabase.from('challenges').insert(
+      newChallenges.map(c => ({
+        ...c,
+        user_id: userId,
+        trick_id: c.trick_id || null,        // convert empty string to null
+        obstacle_id: c.obstacle_id || null,  // convert empty string to null
+        is_completed: false,
+        failed: false,
+        is_manual: false,
+        date_assigned: new Date().toISOString().split('T')[0],
+      }))
+    );
+}
 
     return NextResponse.json({ created: newChallenges.length, challenges: newChallenges });
   } catch (err: any) {
