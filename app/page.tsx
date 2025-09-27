@@ -1,18 +1,24 @@
 'use client';
 
-import Link from 'next/link';
 import { useUserStore } from '@/store/useUserStore';
 import { useXPStore } from '@/store/useXPStore';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { xpForLevel } from '@/lib/xp';
+import { XPBar } from '@/components/XPBar';
+import Link from 'next/link';
+import PageWrapper from '@/components/ui/PageWrapper';
+
 
 export default function Dashboard() {
   const user = useUserStore((state) => state.user);
   const setUser = useUserStore((state) => state.setUser);
-  const xp = useXPStore((state) => state.xp);
-  const level = useXPStore((state) => state.level);
+
+  const xp = useXPStore((state) => state.xp);       // current XP inside level
+  const level = useXPStore((state) => state.level); // current level
   const setXP = useXPStore((state) => state.setXP);
+
   const router = useRouter();
 
   // Fetch XP & level from DB when user logs in
@@ -22,14 +28,13 @@ export default function Dashboard() {
 
       const { data, error } = await supabase
         .from('users')
-        .select('xp_total, level')
+        .select('xp_current, level')
         .eq('id', user.id)
         .single();
 
       if (!error && data) {
-        // Convert total XP into XP in current level
-        const xpInLevel = data.xp_total % (data.level * 100);
-        setXP(xpInLevel, data.level);
+        // use xp_current directly from DB
+        setXP(data.xp_current, data.level);
       }
     };
 
@@ -42,59 +47,39 @@ export default function Dashboard() {
     router.push('/auth/signin');
   };
 
-  const progressPercent = Math.min((xp / (level * 100)) * 100, 100);
+  const xpTarget = xpForLevel(level);
+  const progressPercent = Math.min((xp / xpTarget) * 100, 100);
+
+  
+  // if no user, show login link
+  if (!user) {
+    return (
+      <PageWrapper>
+        <h1 className="text-2xl font-bold mb-4">Welcome to the Dashboard</h1>
+        <Link href="/auth/signin" className="text-blue-500 underline">
+          Please sign in
+        </Link>
+      </PageWrapper>
+    );
+  }
 
   return (
-    <div className="p-4 max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Progression Dashboard</h1>
+    <PageWrapper>
+      {/* XP Bar */}
+      <XPBar
+        level={level}
+        xpCurrent={xp}
+        xpNeeded={xpForLevel(level)}
+      />
 
-      {/* XP / Level */}
-      <div className="mb-6">
-        <p>Level: {level}</p>
-        <div className="w-full bg-gray-300 rounded-full h-4">
-          <div
-            className="bg-blue-500 h-4 rounded-full transition-all duration-300"
-            style={{ width: `${progressPercent}%` }}
-          ></div>
-        </div>
-        <p className="text-sm mt-1">{xp} XP / {level * 100} XP</p>
+      {/* Main Content */}
+      <div className="flex-1 flex items-center justify-center">
+        <Link href="/skate/challenges" className="px-8 py-4 text-lg font-semibold text-white bg-blue-600 rounded-lg shadow hover:bg-blue-700 transition">
+          Go to Challenges
+        </Link>
       </div>
-
-      {/* Auth Buttons */}
-      <div className="flex gap-4">
-        {!user ? (
-          <>
-            <Link
-              href="/auth/signup"
-              className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-            >
-              Sign Up
-            </Link>
-            <Link
-              href="/auth/signin"
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-            >
-              Sign In
-            </Link>
-          </>
-        ) : (
-          <>
-            <p className="text-gray-700 self-center">{user.username}</p>
-            <button
-              onClick={handleSignOut}
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-            >
-              Sign Out
-            </button>
-            <Link
-              href="/skate/challenges"
-              className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600"
-            >
-              My Challenges
-            </Link>
-          </>
-        )}
-      </div>
-    </div>
+    </PageWrapper>
   );
+
+  
 }

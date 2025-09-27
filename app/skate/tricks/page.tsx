@@ -1,89 +1,87 @@
-'use client';
+// app/tricks/page.tsx
+"use client";
 
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import TrickForm from './components/TrickForm';
+import { useState, useEffect } from "react";
+import { Plus } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/Card";
+import { cn } from "@/lib/utils";
+import { canUnlockNewTrick, fetchAllTricks } from "@/lib/tricks";
+import { useUserStore } from "@/store/useUserStore";
+import type { Trick } from "@/types";
+import PageWrapper from "@/components/ui/PageWrapper";
 
-type Trick = {
-  id: string;
-  name: string;
-  stance: string;
-  tier: number;
-  obstacles: { id: string; name: string; type: string; difficulty: number }[];
-};
-
-const TricksPage: React.FC = () => {
+export default function TrickListPage() {
+  const user = useUserStore((state) => state.user);
   const [tricks, setTricks] = useState<Trick[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const fetchTricks = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('tricks')
-        .select(`
-          id,
-          name,
-          stance,
-          tier,
-          trick_obstacles (
-            obstacle_id,
-            obstacles (id, name, type, difficulty)
-          )
-        `);
-
-      if (error) throw error;
-
-      // Map tricks with obstacles array
-      const mapped: Trick[] = data.map((t: any) => ({
-        id: t.id,
-        name: t.name,
-        stance: t.stance,
-        tier: t.tier,
-        obstacles: t.trick_obstacles.map((to: any) => to.obstacles)
-      }));
-
-      setTricks(mapped);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
-    fetchTricks();
+    const loadTricks = async () => {
+      const data = await fetchAllTricks();
+      setTricks(data);
+    };
+    loadTricks();
   }, []);
 
+  const grouped = {
+    1: tricks.filter((t) => t.tier === 1),
+    2: tricks.filter((t) => t.tier === 2),
+    3: tricks.filter((t) => t.tier === 3),
+  };
+
+  const canAdd =
+    !!user &&
+    (user.wildSlots > 0 || canUnlockNewTrick(user, tricks));
+
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Tricks</h1>
-
-      {/* Trick Form */}
-      <div className="mb-6">
-        <TrickForm onSuccess={fetchTricks} />
-      </div>
-
-      {/* Tricks List */}
-      <div>
-        <h2 className="text-xl font-semibold mb-2">Existing Tricks</h2>
-        {loading ? (
-          <p>Loading tricks...</p>
-        ) : (
-          <ul className="space-y-2">
-            {tricks.map(trick => (
-              <li key={trick.id} className="border rounded p-2 shadow-sm">
-                <p className="font-medium">{trick.name} ({trick.stance}) - Tier {trick.tier}</p>
-                <p className="text-sm text-gray-600">
-                  Obstacles: {trick.obstacles.map(o => `${o.name} (${o.type}, diff ${o.difficulty})`).join(', ')}
-                </p>
-              </li>
+    <PageWrapper>
+      {([1, 2, 3] as const).map((tier) => (
+        <div key={tier} className="mb-6">
+          <h2
+            className={cn(
+              "text-lg font-bold mb-2 border-b-2 pb-1",
+              tier === 1 && "text-green-600 border-green-600",
+              tier === 2 && "text-yellow-600 border-yellow-600",
+              tier === 3 && "text-red-600 border-red-600"
+            )}
+          >
+            Tier {tier}
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {grouped[tier].map((trick) => (
+              <Card key={trick.id} className="shadow-sm hover:shadow-md">
+                <CardContent className="p-4 text-center">
+                  {trick.name}
+                </CardContent>
+              </Card>
             ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-};
+          </div>
+        </div>
+      ))}
 
-export default TricksPage;
+      {/* Floating Add Trick Button */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        disabled={!canAdd}
+        className={cn(
+          "fixed bottom-20 right-6 rounded-full p-4 shadow-lg transition",
+          canAdd
+            ? "bg-blue-600 text-white hover:bg-blue-700"
+            : "bg-gray-300 text-gray-500 cursor-not-allowed"
+        )}
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg">
+            <h3 className="text-lg font-bold mb-4">Add Trick</h3>
+            {/* Add Trick Form Here */}
+            <button onClick={() => setShowAddModal(false)}>Close</button>
+          </div>
+        </div>
+      )}
+    </PageWrapper>
+  );
+}

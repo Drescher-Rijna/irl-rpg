@@ -122,3 +122,15 @@ export const recalculateTrickTier = async (trickId: string) => {
 
   console.log(`Updated trick ${trickId} to tier ${newTier}`);
 };
+
+export function canUnlockNewTrick(user: User, tricks: Trick[]): boolean {
+  if (!user || !tricks || tricks.length === 0) return false;
+  console.log(tricks)
+
+  // Rule 1: 70% of tricks are Tier 1
+  const tier1Count = tricks.filter(t => t.tier === 1).length;
+  const percentageTier1 = tier1Count / tricks.length;
+  const meetsTierRule = percentageTier1 >= 0.7;
+
+  return meetsTierRule;
+}

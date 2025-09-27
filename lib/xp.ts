@@ -34,3 +34,7 @@ export const updateUserXP = (user: User, earnedXP: number) => {
     level,
   };
 };
+
+export const xpForLevel = (level: number): number => {
+  return 100 + (level - 1) * 50; // XP required for this level
+};

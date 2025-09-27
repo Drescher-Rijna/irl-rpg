@@ -50,23 +50,23 @@ const ObstacleForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) => {
           onChange={e => setType(e.target.value)}
           className="w-full border rounded p-2"
         >
-          <option value="ledge">Ledge</option>
-          <option value="stair">Stair</option>
           <option value="bank">Bank</option>
-          <option value="hip">Hip</option>
-          <option value="pyramid">Pyramid</option>
-          <option value="a-frame">A-Frame</option>
-          <option value="euro-gap">Euro Gap</option>
-          <option value="flat">Flat</option>
+            <option value="flat">Flat</option>
+            <option value="gap">Gap</option>
+          <option value="ledge">Ledge</option>
+            <option value="manual-pad">Manual Pad</option>
+          <option value="rail">Rail</option>
+           <option value="stair">Stair</option>
+          <option value="transition">Transition</option>
         </select>
       </div>
 
       <div>
-        <label className="block mb-1 font-medium">Difficulty (1–3)</label>
+        <label className="block mb-1 font-medium">Difficulty (1–10)</label>
         <input
           type="number"
           min={1}
-          max={3}
+          max={10}
           value={difficulty}
           onChange={e => setDifficulty(Number(e.target.value))}
           className="w-20 border rounded p-1"

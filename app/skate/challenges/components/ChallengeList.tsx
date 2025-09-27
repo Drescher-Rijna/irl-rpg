@@ -37,6 +37,8 @@ export function ChallengeList() {
     projectedXP: number;
     projectedLevel: number;
     wildSlotAwarded: boolean;
+    currentLevel: number;
+    currentXP: number;
   }>(null);
 
   const [trickModalData, setTrickModalData] = useState<null | {
@@ -88,7 +90,9 @@ export function ChallengeList() {
         bonusXP: data.bonusXP,
         projectedXP: data.projectedXP,
         projectedLevel: data.projectedLevel,
-        wildSlotAwarded: data.willGetWildSlot
+        wildSlotAwarded: data.willGetWildSlot,
+        currentLevel: data.currentLevel,
+        currentXP: data.currentXP,
       });
       setDailyLandsData(null);
     } else {
