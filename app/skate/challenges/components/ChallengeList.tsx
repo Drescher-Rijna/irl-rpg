@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useUserStore } from '@/store/useUserStore';
+import Link from 'next/link';
 import ChallengeItem from './ChallengeItem';
 import XPLevelModal from '@/components/modals/XpLevelModal';
 import TrickCreationModal from '@/components/modals/TrickCreationModal';
 import DailyLandsModal from '@/components/modals/DailyLandsModal';
+import { fetchAllTricks } from '@/lib/tricks';
+import { canGenerateChallenges } from '@/lib/challenges';
 
 type Challenge = {
   id: string;
@@ -29,28 +32,12 @@ export function ChallengeList() {
 
   const user = useUserStore((state) => state.user);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [tricks, setTricks] = useState<Trick[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [xpModalData, setXPModalData] = useState<null | {
-    earnedXP: number;
-    bonusXP?: number;
-    projectedXP: number;
-    projectedLevel: number;
-    wildSlotAwarded: boolean;
-    currentLevel: number;
-    currentXP: number;
-  }>(null);
-
-  const [trickModalData, setTrickModalData] = useState<null | {
-    challengeId: string;
-    challengeType: string;
-  }>(null);
-
-  const [dailyLandsData, setDailyLandsData] = useState<null | {
-    challengeId: string;
-    trickId: string;
-    obstacleId: string;
-  }>(null);
+  const [xpModalData, setXPModalData] = useState<null | any>(null);
+  const [trickModalData, setTrickModalData] = useState<null | any>(null);
+  const [dailyLandsData, setDailyLandsData] = useState<null | any>(null);
 
   // Fetch challenges
   const fetchChallenges = async () => {
@@ -67,7 +54,22 @@ export function ChallengeList() {
     }
   };
 
-  useEffect(() => { fetchChallenges(); }, [user]);
+  // Fetch tricks
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadTricks = async () => {
+      try {
+        const userTricks = await fetchAllTricks();
+        setTricks(userTricks);
+      } catch (err) {
+        console.error('Failed to fetch tricks:', err);
+      }
+    };
+    loadTricks();
+    fetchChallenges();
+  }, [user]);
+
+  const hasEnoughTricks = canGenerateChallenges(tricks);
 
   // Complete daily/initial with lands
   const handleCompleteWithLands = async (challengeId: string, landsCompleted: number, attempts: number) => {
@@ -158,6 +160,7 @@ export function ChallengeList() {
 
   return (
     <div className="space-y-6">
+      {/* Active Challenges */}
       <div>
         <h2 className="text-xl font-bold mb-2">Active Challenges</h2>
         <div className="space-y-4">
@@ -167,6 +170,49 @@ export function ChallengeList() {
         </div>
       </div>
 
+      {/* Generate More Challenges */}
+      <div className="mt-4 flex flex-col items-center">
+        <button
+          disabled={!hasEnoughTricks || loading}
+          onClick={async () => {
+            if (!user?.id) return;
+            setLoading(true);
+            try {
+              const res = await fetch('/api/challenges', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id }),
+              });
+              const data = await res.json();
+              if (res.ok && data.challenges) {
+                setChallenges(prev => [...prev, ...data.challenges]);
+              }
+            } catch (err) {
+              console.error('Failed to generate more challenges:', err);
+            } finally {
+              setLoading(false);
+            }
+          }}
+          className={`px-4 py-2 rounded font-semibold text-white shadow transition ${
+            hasEnoughTricks && !loading
+              ? 'bg-yellow-500 hover:bg-yellow-600'
+              : 'bg-gray-400 cursor-not-allowed'
+          }`}
+        >
+          {loading ? 'Loading...' : 'Generate More Challenges'}
+        </button>
+
+        {!hasEnoughTricks && (
+          <p className="text-center text-gray-700 mt-2">
+            You need at least 5 tricks to generate challenges.{' '}
+            <Link href="/skate/tricks" className="text-blue-500 underline">
+              Add more tricks here
+            </Link>
+          </p>
+        )}
+      </div>
+
+      {/* Completed Challenges */}
       {completedChallenges.length > 0 && (
         <div>
           <h2 className="text-xl font-bold mb-2">Completed Challenges</h2>
@@ -178,30 +224,7 @@ export function ChallengeList() {
         </div>
       )}
 
-      {canGenerateMore && (
-        <div className="mt-4">
-          <button
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const res = await fetch('/api/challenges', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: user.id }),
-                });
-                const data = await res.json();
-                if (res.ok && data.challenges) setChallenges(prev => [...prev, ...data.challenges]);
-              } catch (err) {
-                console.error('Failed to generate more challenges:', err);
-              } finally { setLoading(false); }
-            }}
-            className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600"
-          >
-            Generate More Challenges
-          </button>
-        </div>
-      )}
-
+      {/* Modals */}
       {xpModalData && (
         <XPLevelModal
           data={xpModalData}
@@ -237,10 +260,7 @@ export function ChallengeList() {
           onClose={() => setDailyLandsData(null)}
           onSubmit={(landsCompleted, attempts) => {
             const { challengeId } = dailyLandsData;
-            if (!challengeId || !user?.id) {
-              console.error('Missing userId or challengeId', { userId: user?.id, challengeId });
-              return;
-            }
+            if (!challengeId || !user?.id) return;
             handleCompleteWithLands(challengeId, Number(landsCompleted), Number(attempts));
           }}
         />

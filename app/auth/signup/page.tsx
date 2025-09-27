@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { signUp } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/useUserStore';
-import { supabase } from '@/lib/supabase';
+import PageWrapper from '@/components/ui/PageWrapper';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -13,33 +13,39 @@ export default function SignupPage() {
   const router = useRouter();
   const setUser = useUserStore((state) => state.setUser);
 
- const handleSignup = async (e: React.FormEvent) => {
-  e.preventDefault();
-  try {
-    const authUser = await signUp(email, password, username); // Supabase auth user
-    if (authUser) {
-      // Create profile object including username
-      const profile = {
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage('');
+
+    try {
+      const authUser = await signUp(email, password, username); // signUp now handles users table & obstacles
+
+      if (!authUser) {
+        setMessage('Signup failed. Please try again.');
+        return;
+      }
+
+      // Update global store
+      setUser({
         id: authUser.id,
         email: authUser.email!,
-        username: username, // collected from input
-      };
+        username,
+        level: 1,
+        xp_current: 0,
+        xp_total: 0,
+        wild_slots: 0,
+      });
 
-      // Insert into global store
-      setUser(profile);
-
-      // Optionally, insert into users table in Supabase
-      await supabase.from('users').insert([profile]);
-
-      router.push('/'); // redirect to dashboard
+      // Redirect to dashboard
+      router.replace('/');
+    } catch (err: any) {
+      console.error('Signup error:', err);
+      setMessage(err.message || 'An unexpected error occurred.');
     }
-  } catch (err: any) {
-    setMessage(err.message);
-  }
-};
+  };
 
   return (
-    <div className="p-4 max-w-md mx-auto">
+    <PageWrapper>
       <h1 className="text-xl font-bold mb-4">Sign Up</h1>
       <form onSubmit={handleSignup} className="flex flex-col gap-2">
         <input
@@ -47,7 +53,7 @@ export default function SignupPage() {
           placeholder="Username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="border p-2 rounded"
+          className="border p-2 rounded text-black"
           required
         />
         <input
@@ -55,7 +61,7 @@ export default function SignupPage() {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="border p-2 rounded"
+          className="border p-2 rounded text-black"
           required
         />
         <input
@@ -63,7 +69,7 @@ export default function SignupPage() {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="border p-2 rounded"
+          className="border p-2 rounded text-black"
           required
         />
         <button type="submit" className="bg-green-500 text-white p-2 rounded">
@@ -71,6 +77,6 @@ export default function SignupPage() {
         </button>
       </form>
       {message && <p className="mt-2 text-red-500">{message}</p>}
-    </div>
+    </PageWrapper>
   );
 }

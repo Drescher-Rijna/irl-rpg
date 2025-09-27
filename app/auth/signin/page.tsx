@@ -18,8 +18,8 @@ export default function SignInPage() {
         setMessage(''); // clear previous errors
         try {
             // 1️⃣ Sign in with Supabase
-            console.log("Attempting to sign in with:", email, password);
             const authUser = await signIn(email, password);
+            console.log('signIn response:', authUser);
 
             if (!authUser) {
                 setMessage('Failed to sign in.');
@@ -39,10 +39,11 @@ export default function SignInPage() {
                 email: profile.email,
                 username: profile.username,
                 level: profile.level,
-                xp: profile.xp_current,
-                wildSlots: profile.wild_slots,
+                xp_current: profile.xp_current,
+                xp_total: profile.xp_total,
+                wild_slots: profile.wild_slots,
             });
-
+console.log('authUser:', authUser);
             // 4️⃣ Redirect immediately
             router.push('/');
         } catch (err: any) {

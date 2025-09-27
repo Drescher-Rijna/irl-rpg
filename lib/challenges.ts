@@ -161,3 +161,6 @@ export const generateChallengesForDay = (tricks: Trick[], completedTrickIds: str
     combo: combo || undefined,
   };
 };
+
+// Can generarte challenges must have at least 5 tricks
+export const canGenerateChallenges = (tricks: Trick[]) => tricks.length >= 5;

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import ObstacleForm from './components/ObstacleForm';
+import PageWrapper from '@/components/ui/PageWrapper';
+import { Card, CardContent } from '@/components/ui/Card';
 
 type Obstacle = {
   id: string;
@@ -24,6 +26,11 @@ const ObstaclesPage: React.FC = () => {
         .order('name', { ascending: true });
 
       if (error) throw error;
+      // group by type
+      if (data) {
+        data.sort((a, b) => a.type.localeCompare(b.type));
+      }
+
       setObstacles(data);
     } catch (err) {
       console.error(err);
@@ -37,33 +44,40 @@ const ObstaclesPage: React.FC = () => {
   }, []);
 
   return (
-    <div className="p-6">
+    <PageWrapper>
       <h1 className="text-2xl font-bold mb-4">Obstacles</h1>
-
-      {/* Obstacle Form */}
-      <div className="mb-6">
-        <ObstacleForm onSuccess={fetchObstacles} />
-      </div>
-
       {/* Obstacles List */}
       <div>
-        <h2 className="text-xl font-semibold mb-2">Existing Obstacles</h2>
         {loading ? (
-          <p>Loading obstacles...</p>
+          <p className="text-center text-black">Loading obstacles...</p>
         ) : obstacles.length === 0 ? (
-          <p>No obstacles yet.</p>
+          <p className="text-center text-black">No obstacles yet.</p>
         ) : (
-          <ul className="space-y-2">
-            {obstacles.map(obs => (
-              <li key={obs.id} className="border rounded p-2 shadow-sm">
-                <p className="font-medium">{obs.name}</p>
-                <p className="text-sm text-gray-600">Type: {obs.type}, Difficulty: {obs.difficulty}</p>
-              </li>
+          <div>
+            {Object.entries(
+              obstacles.reduce<Record<string, typeof obstacles>>((acc, obs) => {
+                if (!acc[obs.type]) acc[obs.type] = [];
+                acc[obs.type].push(obs);
+                return acc;
+              }, {})
+            ).map(([type, obsList]) => (
+              <div key={type}>
+                <h2 className="text-xl font-bold mb-2">{type}</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {obsList.map((obstacle) => (
+                    <Card key={obstacle.id} className="shadow-sm hover:shadow-md">
+                      <CardContent className="p-4 text-center">
+                        {obstacle.name} (Diff: {obstacle.difficulty})
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
-    </div>
+    </PageWrapper>
   );
 };
 

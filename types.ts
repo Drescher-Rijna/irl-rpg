@@ -1,9 +1,11 @@
 export type User = {
   id: string;
+  email: string;
+  username: string;
   level: number;
-  xpTotal: number;
-  xpCurrent: number;
-  wildSlots: number;
+  xp_total: number;
+  xp_current: number;
+  wild_slots: number;
 };
 
 export type Obstacle = {

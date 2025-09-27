@@ -54,7 +54,7 @@ const ObstacleForm: React.FC<{ onSuccess?: () => void }> = ({ onSuccess }) => {
             <option value="flat">Flat</option>
             <option value="gap">Gap</option>
           <option value="ledge">Ledge</option>
-            <option value="manual-pad">Manual Pad</option>
+            <option value="manual_pad">Manual Pad</option>
           <option value="rail">Rail</option>
            <option value="stair">Stair</option>
           <option value="transition">Transition</option>

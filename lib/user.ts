@@ -16,9 +16,11 @@ export async function getUserProfile(userId: string): Promise<User | null> {
 
   return {
     id: data.id,
+    email: data.email,
+    username: data.username,
     level: data.level,
-    xpTotal: data.xp_total,
-    xpCurrent: data.xp_current,
-    wildSlots: data.wild_slots,
+    xp_total: data.xp_total,
+    xp_current: data.xp_current,
+    wild_slots: data.wild_slots,
   };
 }
