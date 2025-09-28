@@ -7,19 +7,22 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { canUnlockNewTrick, fetchAllTricks } from "@/lib/tricks";
 import { useUserStore } from "@/store/useUserStore";
-import type { Trick } from "@/types";
+import type { Trick, User } from "@/types";
 import PageWrapper from "@/components/ui/PageWrapper";
+import TrickForm from "./components/TrickForm";
 
 export default function TrickListPage() {
-  const user = useUserStore((state) => state.user);
+  const user = useUserStore((state) => state.user as User);
   const [tricks, setTricks] = useState<Trick[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // Fetch tricks
+  const loadTricks = async () => {
+    const data = await fetchAllTricks();
+    setTricks(data);
+  };
+
   useEffect(() => {
-    const loadTricks = async () => {
-      const data = await fetchAllTricks();
-      setTricks(data);
-    };
     loadTricks();
   }, []);
 
@@ -31,7 +34,7 @@ export default function TrickListPage() {
 
   const canAdd =
     !!user &&
-    (user.wildSlots > 0 || canUnlockNewTrick(user, tricks));
+    (user.wild_slots > 0 || canUnlockNewTrick(user, tricks));
 
   return (
     <PageWrapper>
@@ -73,12 +76,22 @@ export default function TrickListPage() {
         <Plus className="h-6 w-6" />
       </button>
 
+      {/* Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg">
-            <h3 className="text-lg font-bold mb-4">Add Trick</h3>
-            {/* Add Trick Form Here */}
-            <button onClick={() => setShowAddModal(false)}>Close</button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-lg w-full relative">
+            <button
+              onClick={() => setShowAddModal(false)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-gray-800"
+            >
+              ✕
+            </button>
+            <TrickForm
+              onSuccess={() => {
+                setShowAddModal(false);
+                loadTricks(); // ✅ reload trick list
+              }}
+            />
           </div>
         </div>
       )}

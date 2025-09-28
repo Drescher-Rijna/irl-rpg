@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { User } from '@/types';
 
 export type Obstacle = {
   id: string;
@@ -124,13 +125,16 @@ export const recalculateTrickTier = async (trickId: string) => {
 };
 
 export function canUnlockNewTrick(user: User, tricks: Trick[]): boolean {
-  if (!user || !tricks || tricks.length === 0) return false;
-  console.log(tricks)
+  if (!user || !tricks) return false;
 
-  // Rule 1: 70% of tricks are Tier 1
+  // Allow building the initial tricklist freely
+  if (tricks.length < 10) {
+    return true;
+  }
+
+  // Rule: at least 70% of tricks are Tier 1
   const tier1Count = tricks.filter(t => t.tier === 1).length;
   const percentageTier1 = tier1Count / tricks.length;
-  const meetsTierRule = percentageTier1 >= 0.7;
 
-  return meetsTierRule;
+  return percentageTier1 >= 0.7;
 }

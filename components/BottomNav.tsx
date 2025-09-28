@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export function BottomNav() {
   return (
-    <nav className="sticky bottom-0 w-full bg-white shadow-inner border-t">
+    <nav className="sticky shrink-0 bottom-0 w-full bg-white shadow-inner border-t">
       <div className="grid grid-cols-4">
         <Link
           href="/"

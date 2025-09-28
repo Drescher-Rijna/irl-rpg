@@ -50,10 +50,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html>
-      <body>
+      <body className="flex flex-col min-h-screen">
         {/* Global XP Bar */}
         {user && (
-          <div className="p-4">
+          <div className="p-4 bg-gray-100">
             <XPBar
               level={level}
               xpCurrent={xp}

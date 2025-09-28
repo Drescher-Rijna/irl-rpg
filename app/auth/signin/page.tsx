@@ -43,7 +43,7 @@ export default function SignInPage() {
                 xp_total: profile.xp_total,
                 wild_slots: profile.wild_slots,
             });
-console.log('authUser:', authUser);
+
             // 4️⃣ Redirect immediately
             router.push('/');
         } catch (err: any) {

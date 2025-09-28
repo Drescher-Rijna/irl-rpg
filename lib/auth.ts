@@ -11,8 +11,6 @@ export async function signUp(email: string, password: string, username: string) 
   const userId = data.user?.id;
   if (!userId) throw new Error('User creation failed');
 
-  console.log('New user ID:', userId);
-
   // 2️⃣ Insert into your users table
   await supabase.from('users').insert([{
     id: userId,
@@ -23,8 +21,6 @@ export async function signUp(email: string, password: string, username: string) 
     xp_total: 0,
     wild_slots: 0,
   }]);
-
-  console.log('Inserted user into users table');
 
   // 3️⃣ Seed default obstacles for this user
   await supabase.rpc('seed_obstacles_for_user', { p_user_id: userId });

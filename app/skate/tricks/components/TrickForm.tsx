@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/store/useUserStore';
+import Select from "react-select";
 
 type Obstacle = {
   id: string;
@@ -15,11 +17,11 @@ type TrickFormProps = {
 };
 
 const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
+  const user = useUserStore((state) => state.user);
   const [name, setName] = useState('');
   const [stance, setStance] = useState<'regular' | 'switch' | 'nollie' | 'fakie'>('regular');
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [selectedObstacles, setSelectedObstacles] = useState<string[]>([]);
-  const [initialConsistency, setInitialConsistency] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -27,6 +29,7 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
   useEffect(() => {
     const fetchObstacles = async () => {
       const { data, error } = await supabase.from('obstacles').select('*');
+      console.log(data, error);
       if (error) {
         console.error(error);
       } else {
@@ -36,14 +39,13 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
     fetchObstacles();
   }, []);
 
-  const handleCheckboxChange = (id: string) => {
-    setSelectedObstacles(prev =>
-      prev.includes(id) ? prev.filter(o => o !== id) : [...prev, id]
-    );
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      setMessage('You must be logged in to add a trick.');
+      return;
+    }
+
     if (!name || selectedObstacles.length === 0) {
       setMessage('Please fill in the name and select at least one obstacle.');
       return;
@@ -56,11 +58,15 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
       // Insert trick
       const { data: trick, error: trickError } = await supabase
         .from('tricks')
-        .insert([{ name, stance, category_id: 'fb2a123c-d3de-4bfb-a767-019f3585b131' }])
+        .insert([
+          { name, 
+            stance, 
+            user_id: user.id,
+            category_id: 'fb2a123c-d3de-4bfb-a767-019f3585b131' 
+          }
+        ])
         .select('id, name, stance, category_id')
         .single();
-
-      console.log(trick, trickError);
 
       if (trickError) throw trickError;
 
@@ -68,6 +74,7 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
 
       // Insert trick-obstacle relationships
       const obstacleInserts = selectedObstacles.map(obstacleId => ({
+        user_id: user.id,
         trick_id: trickId,
         obstacle_id: obstacleId
       }));
@@ -76,23 +83,20 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
         .insert(obstacleInserts);
       if (obstacleError) throw obstacleError;
 
-      // Insert initial consistency if > 0
-      if (initialConsistency > 0) {
-        const consistencyInserts = selectedObstacles.map(obstacleId => ({
-          trick_id: trickId,
-          obstacle_id: obstacleId,
-          score: initialConsistency
-        }));
-        const { error: consistencyError } = await supabase
-          .from('trick_consistency')
-          .insert(consistencyInserts);
-        if (consistencyError) throw consistencyError;
-      }
+      const consistencyInserts = selectedObstacles.map(obstacleId => ({
+        user_id: user.id,
+        trick_id: trickId,
+        obstacle_id: obstacleId,
+      }));
+      const { error: consistencyError } = await supabase
+        .from('trick_consistency')
+        .insert(consistencyInserts);
+      if (consistencyError) throw consistencyError;
+      
 
       setMessage('Trick added successfully!');
       setName('');
       setSelectedObstacles([]);
-      setInitialConsistency(0);
       if (onSuccess) onSuccess();
     } catch (err: any) {
       console.error(err);
@@ -130,33 +134,27 @@ const TrickForm: React.FC<TrickFormProps> = ({ onSuccess }) => {
         </select>
       </div>
 
-      <div>
-        <label className="block mb-1 font-medium">Obstacles</label>
-        <div className="flex flex-wrap gap-2">
-          {obstacles.map(obstacle => (
-            <label key={obstacle.id} className="flex items-center gap-1 border rounded p-1 px-2">
-              <input
-                type="checkbox"
-                checked={selectedObstacles.includes(obstacle.id)}
-                onChange={() => handleCheckboxChange(obstacle.id)}
-              />
-              {obstacle.name} ({obstacle.type}, diff {obstacle.difficulty})
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="block mb-1 font-medium">Initial Consistency (0–10)</label>
-        <input
-          type="number"
-          min={0}
-          max={10}
-          value={initialConsistency}
-          onChange={e => setInitialConsistency(Number(e.target.value))}
-          className="w-20 border rounded p-1"
-        />
-      </div>
+     <div>
+  <label className="block mb-1 font-medium">Obstacles</label>
+  <Select
+    isMulti
+    options={obstacles.map((o) => ({
+      value: o.id,
+      label: `${o.name} (${o.type}, diff ${o.difficulty})`,
+    }))}
+    value={obstacles
+      .filter((o) => selectedObstacles.includes(o.id))
+      .map((o) => ({
+        value: o.id,
+        label: `${o.name} (${o.type}, diff ${o.difficulty})`,
+      }))}
+    onChange={(selected) => {
+      setSelectedObstacles(selected.map((s) => s.value));
+    }}
+    className="w-full"
+    placeholder="Search and select obstacles..."
+  />
+</div>
 
       <button
         type="submit"

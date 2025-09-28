@@ -13,7 +13,7 @@ export default function PageWrapper({
   return (
     <div
       className={cn(
-        "flex flex-col p-4 justify-center min-h-screen bg-gray-100",
+        "flex flex-col p-4 justify-center flex-1 overflow-y-auto bg-gray-100",
         className
       )}
     >

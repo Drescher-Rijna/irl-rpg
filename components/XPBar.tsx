@@ -11,7 +11,7 @@ export function XPBar({ level, xpCurrent, xpNeeded }: XPBarProps) {
   const xpPercent = Math.round((xpCurrent / xpNeeded) * 100);
 
   return (
-    <Card className="m-4 shadow-md rounded-2xl">
+    <Card className="shadow-md rounded-2xl">
       <CardContent className="p-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-lg font-semibold">Level {level}</span>
