@@ -150,11 +150,6 @@ export function ChallengeList() {
 
   const activeChallenges = challenges.filter(c => !c.is_completed);
   const completedChallenges = challenges.filter(c => c.is_completed);
-  const canGenerateMore =
-    activeChallenges.filter(c => c.type === 'daily').length < MAX_DAILY ||
-    activeChallenges.filter(c => c.type === 'line').length < MAX_LINE ||
-    activeChallenges.filter(c => c.type === 'combo').length < MAX_COMBO ||
-    activeChallenges.filter(c => c.type === 'boss').length < MAX_BOSS;
 
   if (loading) return <p>Loading challenges...</p>;
 

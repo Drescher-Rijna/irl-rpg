@@ -33,9 +33,9 @@ export const generateDailyChallenges = (
   const tier2 = available.filter(t => t.tier === 2);
   const tier3 = available.filter(t => t.tier === 3);
 
-  let tier1Count = Math.min(Math.ceil(totalChallenges * 0.7), tier1.length);
-  let tier2Count = Math.min(Math.ceil(totalChallenges * 0.2), tier2.length);
-  let tier3Count = Math.min(totalChallenges - tier1Count - tier2Count, tier3.length);
+  const tier1Count = Math.min(Math.ceil(totalChallenges * 0.7), tier1.length);
+  const tier2Count = Math.min(Math.ceil(totalChallenges * 0.2), tier2.length);
+  const tier3Count = Math.min(totalChallenges - tier1Count - tier2Count, tier3.length);
 
   const challenges: Challenge[] = [];
 
@@ -54,7 +54,7 @@ export const generateDailyChallenges = (
       xp = 50;
       difficulty = 1;
     } else {
-      let target = Math.min(10, Math.ceil(consistency + 1));
+      const target = Math.min(10, Math.ceil(consistency + 1));
       description = `Land ${trick.name}${obstacle ? ` on ${obstacle.name}` : ''} ${target}/10 times`;
       unlock = { type: 'consistency', target };
       xp = 40 + target * 5;

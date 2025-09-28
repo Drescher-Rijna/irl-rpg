@@ -78,12 +78,12 @@ export async function POST(req: Request) {
     const existingDailyTrickIds = existing
       .filter(c => c.type === 'daily' && !c.is_completed && c.date_assigned === today)
       .map(c => c.trick_id);
-    const existingLineTrickIds = existing
+    /* const existingLineTrickIds = existing
       .filter(c => c.type === 'line' && !c.is_completed)
       .map(c => c.trick_id);
     const existingComboTrickIds = existing
       .filter(c => c.type === 'combo' && !c.is_completed)
-      .map(c => c.trick_id);
+      .map(c => c.trick_id); */
     const existingBossTrickIds = existing
       .filter(c => c.type === 'boss' && !c.is_completed)
       .map(c => c.trick_id);

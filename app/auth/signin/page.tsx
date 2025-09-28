@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { signIn } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/useUserStore';

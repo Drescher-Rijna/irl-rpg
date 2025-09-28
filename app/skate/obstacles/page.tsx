@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import ObstacleForm from './components/ObstacleForm';
 import PageWrapper from '@/components/ui/PageWrapper';
 import { Card, CardContent } from '@/components/ui/Card';
 

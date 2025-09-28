@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { generateDailyChallenges, generateBossChallenge } from '@/lib/challenges';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
