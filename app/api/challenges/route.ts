@@ -114,20 +114,22 @@ const existingBossTrickIds: string[] = existing
     if (bossCount < MAX_BOSS) {
       const availableBoss = tricks.filter(t => !existingBossTrickIds.includes(t.id));
       if (availableBoss.length > 0) {
-        const boss = await generateBossChallenge(availableBoss, existing);
+        const allObstaclesRes = await supabase.from('obstacles').select('*') as { data: Obstacle[] | null; error: any };
+        const allObstacles = allObstaclesRes.data || [];
+        const boss = await generateBossChallenge(availableBoss, existing ?? [], allObstacles);
         if (boss) newChallenges.push(boss);
       }
     }
 
     // 9️⃣ Generate Combo Challenges
-    if (comboCount < MAX_COMBO) {
+    if (comboCount < MAX_COMBO && existing) {
       const combo = await generateComboChallenge(tricks, existing.filter(c => c.type === 'combo'));
       if (combo) newChallenges.push(combo);
     }
 
     // 🔟 Generate Line Challenges
-    if (lineCount < MAX_LINE) {
-      const line = await generateLineChallenge(tricks, existing.filter(c => c.type === 'line'));
+    if (lineCount < MAX_LINE && existing) {
+      const line = await generateLineChallenge(existing.filter(c => c.type === 'line'));
       if (line) newChallenges.push(line);
     }
 
