@@ -16,10 +16,34 @@ export type Obstacle = {
   score?: number;
 };
 
+export type TrickObstacle = {
+  obstacle_id: string;
+  trick_id: string;
+  consistency?: number;
+};
+
 export type Trick = {
   id: string;
   name: string;
   stance: string;
   obstacles: Obstacle[];
-  tier?: number;
+  trick_obstacles?: TrickObstacle[];
+  consistency?: number;
+  tier?: number | null;
+};
+
+export type Challenge = {
+  id?: string;
+  type: 'daily' | 'boss' | 'line' | 'combo' | 'initial';
+  name: string;
+  description: string;
+  tier: number;
+  difficulty: number;
+  xp_reward: number;
+  unlock_condition: any;
+  is_completed: boolean;
+  failed?: boolean;
+  trick_id?: string;
+  obstacle_id?: string;
+  date_assigned?: string;
 };

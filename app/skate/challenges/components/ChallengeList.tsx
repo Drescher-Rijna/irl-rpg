@@ -9,27 +9,9 @@ import TrickCreationModal from '@/components/modals/TrickCreationModal';
 import DailyLandsModal from '@/components/modals/DailyLandsModal';
 import { fetchAllTricks } from '@/lib/tricks';
 import { canGenerateChallenges } from '@/lib/challenges';
-
-type Challenge = {
-  id: string;
-  type: 'daily' | 'boss' | 'line' | 'combo' | 'initial';
-  name: string;
-  description: string;
-  tier: number;
-  difficulty: number;
-  xp_reward: number;
-  is_completed: boolean;
-  failed?: boolean;
-  trick_id?: string;
-  obstacle_id?: string;
-};
+import { Trick, Challenge } from '@/types';
 
 export function ChallengeList() {
-  const MAX_DAILY = 5;
-  const MAX_LINE = 2;
-  const MAX_COMBO = 2;
-  const MAX_BOSS = 1;
-
   const user = useUserStore((state) => state.user);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [tricks, setTricks] = useState<Trick[]>([]);
@@ -46,7 +28,7 @@ export function ChallengeList() {
     try {
       const res = await fetch(`/api/challenges?userId=${user.id}`);
       const data = await res.json();
-      if (res.ok) setChallenges(data.challenges || []);
+      if (res.ok) setChallenges(data.challenges as Challenge[] || []);
     } catch (err) {
       console.error('Challenge fetch failed:', err);
     } finally {

@@ -27,6 +27,7 @@ export const fetchAllTricks = async (): Promise<Trick[]> => {
       name,
       stance,
       tier,
+      consistency,
       trick_obstacles (
         obstacle_id,
         obstacles (id, name, type, difficulty)

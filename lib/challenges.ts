@@ -1,28 +1,10 @@
-type Trick = {
-  id: string;
-  name: string;
-  tier: number;
-  consistency: number;
-  obstacles?: { id: string; name: string; difficulty: number; consistency?: number }[];
-};
-
-type Challenge = {
-  trick_id: string;
-  name: string;
-  description: string;
-  tier: number;
-  difficulty: number;
-  xp_reward: number;
-  type: 'daily' | 'boss' | 'line' | 'combo';
-  unlock_condition: Record<string, any>;
-  obstacle_id?: string | null;
-};
+import { Trick, Challenge } from '@/types';
 
 // --- DAILY ---
 export const generateDailyChallenges = (
   tricks: Trick[],
   completedTrickIds: string[] = [],
-  totalChallenges = 3
+  totalChallenges = 5
 ): Challenge[] => {
   const available = tricks.filter(
     t => !completedTrickIds.includes(t.id) && (t.consistency ?? 0) < 10
@@ -58,19 +40,20 @@ export const generateDailyChallenges = (
       description = `Land ${trick.name}${obstacle ? ` on ${obstacle.name}` : ''} ${target}/10 times`;
       unlock = { type: 'consistency', target };
       xp = 40 + target * 5;
-      difficulty = trick.tier + (target > 7 ? 2 : 1);
+      difficulty = (trick.tier ?? 1) + (target > 7 ? 2 : 1);
     }
 
     return {
       trick_id: trick.id,
       name: `Daily Challenge: ${trick.name}`,
       description,
-      tier: trick.tier,
       difficulty,
+      tier: trick.tier ?? 1,
       xp_reward: xp,
       type: 'daily',
       unlock_condition: unlock,
       obstacle_id: obstacle?.id,
+      is_completed: false,
     };
   };
 
@@ -104,7 +87,8 @@ export const generateLineChallenge = (dailyChallenges: Challenge[]): Challenge |
     xp_reward: 120,
     type: 'line',
     unlock_condition: { type: 'line', lineKey, tricks: lineTricks.map(t => t.trick_id) },
-    obstacle_id: null,
+    obstacle_id: '',
+    is_completed: false,
   };
 };
 
@@ -142,7 +126,8 @@ export const generateComboChallenge = (dailyChallenges: Challenge[], chance = 0.
     xp_reward: 100,
     type: 'combo',
     unlock_condition: { type: 'combo', comboKey, tricks: [a.trick_id, b.trick_id] },
-    obstacle_id: null,
+    obstacle_id: '',
+    is_completed: false,
   };
 };
 

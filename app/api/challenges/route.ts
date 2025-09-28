@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { generateDailyChallenges, generateBossChallenge, generateComboChallenge, generateLineChallenge } from '@/lib/challenges';
 import { NextResponse } from 'next/server';
+import { Obstacle, Challenge, Trick } from '@/types';
 
 export async function POST(req: Request) {
   try {
@@ -36,28 +37,38 @@ export async function POST(req: Request) {
     : 0;
 
   // Flatten obstacles from trick_obstacles
-  const obstacles = trick.trick_obstacles?.map(to => ({
-        id: to.obstacle_id,
-        name: to.obstacles.name,
-        type: to.obstacles.type,
-        difficulty: to.obstacles.difficulty,
-        consistency: relatedConsistency.find(c => c.obstacle_id === to.obstacle_id)?.score || 0,
-      })) || [];
+  const obstacles: Obstacle[] =
+    trick.trick_obstacles?.map(to => {
+      // Find the corresponding obstacle
+      const obstacle = to.obstacles.find(o => o.id === to.obstacle_id);
+      if (!obstacle) return null; // Skip if no matching obstacle
+
+      // Find the related consistency score
+      const consistencyScore = relatedConsistency.find(c => c.obstacle_id === to.obstacle_id)?.score ?? 0;
 
       return {
-        id: trick.id,
-        name: trick.name,
-        tier: trick.tier,
-        consistency: avgConsistency,
-        obstacles,
-      };
-    });
+        id: obstacle.id,
+        name: obstacle.name,
+        type: obstacle.type,
+        difficulty: obstacle.difficulty,
+        score: consistencyScore,
+      } as Obstacle;
+    }).filter((o): o is Obstacle => o !== null) || []
+  
+     return {
+      id: trick.id,
+      name: trick.name,
+      tier: trick.tier ?? undefined,
+      consistency: avgConsistency,
+      obstacles,
+    } as Trick;
+  });
 
     // 4️⃣ Fetch existing challenges for user
     const { data: existing, error: existingError } = await supabase
       .from('challenges')
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_id', userId) as { data: Challenge[] | null; error: any };
     if (existingError) return NextResponse.json({ error: 'Failed to fetch challenges' }, { status: 500 });
 
     // 5️⃣ Count current challenges
@@ -66,29 +77,29 @@ export async function POST(req: Request) {
     const MAX_COMBO = 2;
     const MAX_BOSS = 1;
 
-    const dailyCount = existing.filter(c => c.type === 'daily' && !c.is_completed).length;
-    const lineCount = existing.filter(c => c.type === 'line' && !c.is_completed).length;
-    const comboCount = existing.filter(c => c.type === 'combo' && !c.is_completed).length;
-    const bossCount = existing.filter(c => c.type === 'boss' && !c.is_completed).length;
+    const dailyCount = existing?.filter(c => c.type === 'daily' && !c.is_completed).length ?? 0;
+    const lineCount = existing?.filter(c => c.type === 'line' && !c.is_completed).length ?? 0;
+    const comboCount = existing?.filter(c => c.type === 'combo' && !c.is_completed).length ?? 0;
+    const bossCount = existing?.filter(c => c.type === 'boss' && !c.is_completed).length ?? 0;
 
     const newChallenges = [];
 
     // 6️⃣ Prepare existing trick IDs per type to prevent duplicates
     const today = new Date().toISOString().split('T')[0];
-    const existingDailyTrickIds = existing
-      .filter(c => c.type === 'daily' && !c.is_completed && c.date_assigned === today)
-      .map(c => c.trick_id);
-    /* const existingLineTrickIds = existing
+const existingDailyTrickIds: string[] = (existing
+  ?.filter(c => c.type === 'daily' && !c.is_completed && c.date_assigned === today)
+  .map(c => c.trick_id)
+  .filter((id): id is string => !!id)) || [];    /* const existingLineTrickIds = existing
       .filter(c => c.type === 'line' && !c.is_completed)
       .map(c => c.trick_id);
     const existingComboTrickIds = existing
       .filter(c => c.type === 'combo' && !c.is_completed)
       .map(c => c.trick_id); */
-    const existingBossTrickIds = existing
-      .filter(c => c.type === 'boss' && !c.is_completed)
-      .map(c => c.trick_id);
-
-
+const existingBossTrickIds: string[] = existing
+  ?.filter(c => c.type === 'boss' && !c.is_completed)
+  .map(c => c.trick_id)
+  .filter((id): id is string => !!id) || [];
+  
     // 7️⃣ Generate Daily Challenges
     if (dailyCount < MAX_DAILY) {
       const availableDaily = tricks.filter(t => !existingDailyTrickIds.includes(t.id));
