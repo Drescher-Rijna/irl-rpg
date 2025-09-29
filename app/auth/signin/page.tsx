@@ -15,11 +15,11 @@ export default function SignInPage() {
 
     const handleSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
+        router.push('/');
         setMessage(''); // clear previous errors
         try {
             // 1️⃣ Sign in with Supabase
             const authUser = await signIn(email, password);
-            console.log('signIn response:', authUser);
 
             if (!authUser) {
                 setMessage('Failed to sign in.');
