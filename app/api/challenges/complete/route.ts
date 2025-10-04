@@ -44,6 +44,15 @@ export async function POST(req: Request) {
           }
         }
 
+        // Ensure trick_obstacle exists
+        await supabase.from('trick_obstacles').upsert(
+          {
+            trick_id: challenge.trick_id,
+            obstacle_id: challenge.obstacle_id,
+          },
+          { onConflict: 'trick_id,obstacle_id' }
+        );
+
         // Update trick consistency
         await supabase.from('trick_consistency').upsert(
           {
@@ -67,14 +76,29 @@ export async function POST(req: Request) {
 
         await recalculateTrickTier(challenge.trick_id);
       }
-    } else if (challenge.type === 'boss') {
-      // Boss logic
-      await supabase
-        .from('trick_consistency')
-        .update({ landed: true })
-        .eq('trick_id', challenge.trick_id)
-        .eq('obstacle_id', challenge.obstacle_id);
+    } 
+    else if (challenge.type === 'boss') {
+      // ✅ Boss confirms trick–obstacle exists
+      await supabase.from('trick_obstacles').upsert(
+        {
+          trick_id: challenge.trick_id,
+          obstacle_id: challenge.obstacle_id,
+        },
+        { onConflict: 'trick_id,obstacle_id' }
+      );
 
+      // Start with a baseline consistency (landed once)
+      await supabase.from('trick_consistency').upsert(
+        {
+          trick_id: challenge.trick_id,
+          obstacle_id: challenge.obstacle_id,
+          score: 1,
+          landed: true,
+        },
+        { onConflict: 'trick_id,obstacle_id' }
+      );
+
+      // Spawn the initial assessment challenge
       await supabase.from('challenges').insert([
         {
           trick_id: challenge.trick_id,
@@ -86,12 +110,29 @@ export async function POST(req: Request) {
           tier: 1,
           difficulty: 2,
           unlock_condition: { type: 'attempts', attempts: 10 },
+          user_id: userId,
+          is_completed: false,
+          failed: false,
+          date_assigned: new Date().toISOString().split('T')[0],
         },
       ]);
 
       earnedXP = challenge.xp_reward || calculateXP(challenge.tier || 1, 10);
-    } else if (['combo', 'line'].includes(challenge.type)) {
+    } 
+    else if (['combo', 'line'].includes(challenge.type)) {
+      // Combo/line just grant XP and optionally log attempts
       earnedXP = challenge.xp_reward;
+
+      if (challenge.trick_id && challenge.obstacle_id) {
+        await supabase.from('trick_logs').insert({
+          trick_id: challenge.trick_id,
+          obstacle_id: challenge.obstacle_id,
+          attempts: attempts ?? 0,
+          landed: landsCompleted ?? 0,
+          score: landsCompleted && attempts ? Math.floor((landsCompleted / attempts) * 10) : null,
+          date: new Date(),
+        });
+      }
     }
 
     // 3️⃣ Mark challenge completed
@@ -114,7 +155,6 @@ export async function POST(req: Request) {
 
     const willGetWildSlot = projectedLevel > user.level && projectedLevel % 10 === 0;
 
-    // 6️⃣ Return info for frontend modal
     return NextResponse.json({
       success: true,
       challengeId,

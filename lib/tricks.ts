@@ -1,25 +1,13 @@
+// lib/trick.ts
 import { supabase } from '@/lib/supabase';
-import type { User } from '@/types';
+import type { User, Trick, Obstacle } from '@/types';
 
-export type Obstacle = {
-  id: string;
-  name: string;
-  type: string;
-  difficulty: number;
-  score?: number; // optional consistency score
-};
-
-export type Trick = {
-  id: string;
-  name: string;
-  stance: string;
-  obstacles: Obstacle[];
-  tier?: number;
-};
-
-// fetch all tricks from the database
-export const fetchAllTricks = async (): Promise<Trick[]> => {
-  // 1️⃣ Fetch all tricks with obstacles
+/**
+ * Fetch tricks for a user and include obstacles + per-obstacle consistency scores.
+ * Works with either `trick_obstacle_consistencies` (preferred) or `trick_consistency` (legacy).
+ */
+export async function fetchAllTricks(userId: string): Promise<Trick[]> {
+  // 1) Fetch tricks and their linked obstacles
   const { data: tricksData, error: tricksError } = await supabase
     .from('tricks')
     .select(`
@@ -27,115 +15,146 @@ export const fetchAllTricks = async (): Promise<Trick[]> => {
       name,
       stance,
       tier,
-      consistency,
       trick_obstacles (
+        id,
         obstacle_id,
-        obstacles (id, name, type, difficulty)
+        obstacles ( id, name, type, difficulty, obstacle_type_id )
       )
-    `);
+    `)
+    .eq('user_id', userId);
 
-  if (tricksError || !tricksData) {
+  if (tricksError) {
     console.error('Error fetching tricks:', tricksError);
     return [];
   }
+  if (!tricksData) return [];
 
-  // 2️⃣ Fetch all consistency scores
-  const { data: consistencyData, error: consistencyError } = await supabase
-    .from('trick_consistency')
-    .select('*');
+  // 2) Fetch consistencies from canonical table; if empty try legacy name
+  const { data: consistenciesA, error: consErrA } = await supabase
+    .from('trick_obstacle_consistencies')
+    .select('*')
+    .eq('user_id', userId);
 
-  if (consistencyError) {
-    console.error('Error fetching consistency:', consistencyError);
-    return [];
+  let consistencyData = consistenciesA;
+  if (consErrA || !consistenciesA) {
+    // fallback for older schema
+    const { data: consB } = await supabase
+      .from('trick_consistency')
+      .select('*')
+      .eq('user_id', userId);
+    consistencyData = consB || [];
   }
 
-  // Map consistency for quick lookup
-  const consistencyMap: Record<string, number> = {};
-  consistencyData.forEach((c: any) => {
-    consistencyMap[`${c.trick_id}-${c.obstacle_id}`] = c.score;
+  // 3) Build map for quick lookup
+  const consistencyMap: Record<string, any> = {};
+  (consistencyData || []).forEach((c: any) => {
+    // key by trick_obstacle OR trick+obstacle
+    if (c.trick_obstacle_id) {
+      consistencyMap[`to_${c.trick_obstacle_id}`] = c;
+    } else {
+      consistencyMap[`${c.trick_id}-${c.obstacle_id}`] = c;
+    }
   });
 
-  // 3️⃣ Merge consistency into obstacles
-  const tricks: Trick[] = tricksData.map((t: any) => ({
-    id: t.id,
-    name: t.name,
-    stance: t.stance,
-    tier: t.tier,
-    obstacles: t.trick_obstacles.map((to: any) => ({
-      ...to.obstacles,
-      score: consistencyMap[`${t.id}-${to.obstacle_id}`] ?? 0
-    }))
-  }));
+  // 4) Build Trick[] with obstacles and per-obstacle score
+  const tricks = (tricksData || []).map((t: any) => {
+    const obstacles: Obstacle[] = (t.trick_obstacles || []).map((to: any) => {
+      const byTo = consistencyMap[`to_${to.id}`];
+      const byKey = consistencyMap[`${t.id}-${to.obstacle_id}`];
+      const cons = byTo ?? byKey ?? null;
+
+      return {
+        id: to.obstacle_id,
+        name: to.obstacles?.name,
+        type: to.obstacles?.type,
+        difficulty: to.obstacles?.difficulty,
+        score: cons ? cons.score ?? 0 : 0,
+        landed: cons ? !!cons.landed : false,
+        trick_obstacle_id: to.id
+      } as any;
+    });
+
+    // compute simple overall consistency average (only obstacles that have a score > 0)
+    const scored = obstacles.filter(o => typeof o.score === 'number' && o.score > 0);
+    const consistencyAvg =
+      scored.length > 0 ? Math.round((scored.reduce((s, o) => s + (o.score || 0), 0) / scored.length) * 100) / 100 : 0;
+
+    return {
+      id: t.id,
+      name: t.name,
+      stance: t.stance,
+      tier: t.tier,
+      consistency: consistencyAvg,
+      obstacles
+    } as Trick;
+  });
 
   return tricks;
-};
+}
 
 /**
- * Pure function: given scores, return tier
+ * Pure: given scores (0–10) returns tier
  */
 export const calculateTier = (scores: number[]): number => {
-  if (!scores.length) return 3; // default tier
+  if (!scores || scores.length === 0) return 3;
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-
-  if (avg >= 7) return 1; // mastered
-  if (avg >= 4) return 2; // moderate
-  return 3; // beginner
+  if (avg >= 7) return 1;
+  if (avg >= 4) return 2;
+  return 3;
 };
 
 /**
- * Fetch trick consistencies, calculate overall tier,
- * and update the trick in DB.
+ * Recalculate overall trick tier using only landed = true scores (and score > 0)
  */
 export const recalculateTrickTier = async (trickId: string) => {
+  // Try canonical table first
   const { data: consistencies, error } = await supabase
-    .from("trick_consistency")
-    .select("score, landed")
-    .eq("trick_id", trickId);
+    .from('trick_obstacle_consistencies')
+    .select('score, landed')
+    .eq('trick_id', trickId);
 
-  if (error) {
-    console.error("Failed to fetch consistencies:", error);
+  let rows = consistencies;
+  if (error || !rows) {
+    // fallback to legacy
+    const { data: legacy } = await supabase
+      .from('trick_consistency')
+      .select('score, landed')
+      .eq('trick_id', trickId);
+    rows = legacy || [];
+  }
+
+  if (!rows || rows.length === 0) {
+    console.debug('No consistency rows for trick:', trickId);
     return;
   }
 
-  // Use only landed = true
-  const validScores = consistencies?.filter(c => c.landed && c.score > 0) || [];
-
-  if (validScores.length === 0) {
-    console.log("No landed consistencies for trick:", trickId);
+  const valid = (rows || []).filter((r: any) => r.landed && typeof r.score === 'number' && r.score > 0);
+  if (valid.length === 0) {
+    // No landed scores yet — optionally set tier to 3 or keep existing
+    console.debug('No landed scored rows for trick:', trickId);
     return;
   }
 
-  // Extract just scores
-  const scores = validScores.map(c => c.score);
-
-  // Use pure function
+  const scores = valid.map((r: any) => r.score);
   const newTier = calculateTier(scores);
 
-  // Update DB
-  const { error: updateError } = await supabase
-    .from("tricks")
-    .update({ tier: newTier })
-    .eq("id", trickId);
-
-  if (updateError) {
-    console.error("Failed to update trick tier:", updateError);
-    return;
-  }
-
-  console.log(`Updated trick ${trickId} to tier ${newTier}`);
+  const { error: updErr } = await supabase.from('tricks').update({ tier: newTier }).eq('id', trickId);
+  if (updErr) console.error('Failed to update trick tier:', updErr);
+  else console.log(`Updated trick ${trickId} -> tier ${newTier}`);
 };
 
-export function canUnlockNewTrick(user: User, tricks: Trick[]): boolean {
-  if (!user || !tricks) return false;
+/**
+ * Business rule: can unlock new trick without a wild slot
+ * - allow free building until N tricks (e.g. 10)
+ * - otherwise require 70% of existing tricks to be tier 1
+ */
+export function canUnlockNewTrick(user: User | null, tricks: Trick[] | null): boolean {
+  if (!user) return false;
+  if (!tricks) return false;
 
-  // Allow building the initial tricklist freely
-  if (tricks.length < 10) {
-    return true;
-  }
+  // allow early growth
+  if (tricks.length < 10) return true;
 
-  // Rule: at least 70% of tricks are Tier 1
-  const tier1Count = tricks.filter(t => t.tier === 1).length;
-  const percentageTier1 = tier1Count / tricks.length;
-
-  return percentageTier1 >= 0.7;
+  const tier1 = tricks.filter(t => t.tier === 1).length;
+  return tier1 / tricks.length >= 0.7;
 }

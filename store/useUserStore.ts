@@ -6,6 +6,7 @@ import type { User } from "@/types";
 type UserState = {
   user: User | null;
   setUser: (user: User | null) => void;
+  clearUser: () => void;
 };
 
 export const useUserStore = create<UserState>()(
@@ -16,8 +17,8 @@ export const useUserStore = create<UserState>()(
       clearUser: () => set({ user: null }),
     }),
     {
-      name: "user-storage", // key in localStorage
-      getStorage: () => localStorage, // explicitly use localStorage
+      name: "user-storage",
+      getStorage: () => localStorage,
     }
   )
 );

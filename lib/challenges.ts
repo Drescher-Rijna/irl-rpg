@@ -1,5 +1,41 @@
 import { Trick, Challenge, Obstacle } from '@/types';
 
+// --- INITIAL ---
+export const generateInitialChallenge = (
+  trick: Trick,
+  allObstacles: Obstacle[]
+): Challenge | null => {
+  if (!trick.obstacle_type_ids?.length) return null;
+
+  // 1. Find all obstacles for the user matching the trick's obstacle types
+  const candidates = allObstacles.filter((o) =>
+    trick.obstacle_type_ids.includes(o.obstacle_type_id)
+  );
+
+  if (!candidates.length) return null;
+
+  // 2. Special rule: if flat exists, pick Flatground
+  const flatCandidate = candidates.find(
+    (o) => o.name.toLowerCase() === "flatground"
+  );
+  const obstacle =
+    flatCandidate || candidates.sort((a, b) => a.difficulty - b.difficulty)[0];
+
+  // 3. Create intro challenge
+  return {
+    trick_id: trick.id,
+    obstacle_id: obstacle.id,
+    name: `Intro Challenge: ${trick.name}`,
+    description: `Land ${trick.name} on ${obstacle.name} as many times as you can out of 10.`,
+    type: "initial",
+    tier: trick.tier ?? 3, // start as tier 3 until proven otherwise
+    difficulty: obstacle.difficulty,
+    xp_reward: 50, // static reward for intro challenge
+    unlock_condition: { type: "attempts", attempts: 10 },
+    is_completed: false,
+  };
+};
+
 // --- DAILY ---
 export const generateDailyChallenges = (
   tricks: Trick[],
@@ -124,7 +160,7 @@ export const generateBossChallenge = (
   const harderObstacle = allObstacles
     .filter(
       (o) =>
-        o.type === currentObstacle.type &&
+        o.obstacle_type_id === currentObstacle.obstacle_type_id &&
         o.difficulty > currentObstacle.difficulty
     )
     .sort((a, b) => a.difficulty - b.difficulty)[0];

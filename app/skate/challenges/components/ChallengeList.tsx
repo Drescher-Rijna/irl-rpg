@@ -41,7 +41,7 @@ export function ChallengeList() {
     if (!user?.id) return;
     const loadTricks = async () => {
       try {
-        const userTricks = await fetchAllTricks();
+        const userTricks = await fetchAllTricks(user.id);
         setTricks(userTricks);
       } catch (err) {
         console.error('Failed to fetch tricks:', err);

@@ -17,7 +17,7 @@ export default function Dashboard() {
 
     const loadTricks = async () => {
       setLoading(true);
-      const userTricks = await fetchAllTricks(); // optionally filter by user if fetchAllTricks supports userId
+      const userTricks = await fetchAllTricks(user.id);
       setTricks(userTricks);
       setLoading(false);
     };

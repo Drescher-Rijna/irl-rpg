@@ -11,7 +11,7 @@ export type User = {
 export type Obstacle = {
   id: string;
   name: string;
-  type: string;
+  obstacle_type_id: string;
   difficulty: number;
   score?: number;
 };
@@ -26,6 +26,7 @@ export type Trick = {
   id: string;
   name: string;
   stance: string;
+  obstacle_type_ids: string[];
   obstacles: Obstacle[];
   trick_obstacles?: TrickObstacle[];
   consistency?: number;

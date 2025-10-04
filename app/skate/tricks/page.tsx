@@ -18,7 +18,7 @@ export default function TrickListPage() {
 
   // Fetch tricks
   const loadTricks = async () => {
-    const data = await fetchAllTricks();
+    const data = await fetchAllTricks(user.id);
     setTricks(data);
   };
 
@@ -89,7 +89,7 @@ export default function TrickListPage() {
             <TrickForm
               onSuccess={() => {
                 setShowAddModal(false);
-                loadTricks(); // ✅ reload trick list
+                loadTricks();
               }}
             />
           </div>
