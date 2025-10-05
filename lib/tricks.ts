@@ -18,7 +18,7 @@ export async function fetchAllTricks(userId: string): Promise<Trick[]> {
       trick_obstacles (
         id,
         obstacle_id,
-        obstacles ( id, name, type, difficulty, obstacle_type_id )
+        obstacles ( id, name, difficulty, obstacle_type_id )
       )
     `)
     .eq('user_id', userId);
