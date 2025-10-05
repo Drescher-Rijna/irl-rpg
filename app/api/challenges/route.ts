@@ -87,7 +87,7 @@ export async function POST(req: Request) {
     // 6️⃣ Prepare existing trick IDs per type to prevent duplicates
     const today = new Date().toISOString().split('T')[0];
 const existingDailyTrickIds: string[] = (existing
-  ?.filter(c => c.type === 'daily' && !c.is_completed && c.date_assigned === today)
+  ?.filter(c => c.type === 'daily' && !c.completed && c.created_at === today)
   .map(c => c.trick_id)
   .filter((id): id is string => !!id)) || [];    /* const existingLineTrickIds = existing
       .filter(c => c.type === 'line' && !c.is_completed)
@@ -141,10 +141,9 @@ const existingBossTrickIds: string[] = existing
         user_id: userId,
         trick_id: c.trick_id || null,        // convert empty string to null
         obstacle_id: c.obstacle_id || null,  // convert empty string to null
-        is_completed: false,
+        completed: false,
         failed: false,
-        is_manual: false,
-        date_assigned: new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString().split('T')[0],
       }))
     );
 }
@@ -157,18 +156,83 @@ const existingBossTrickIds: string[] = existing
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const userId = searchParams.get('userId');
-  if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+  try {
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('userId');
 
-  const { data, error } = await supabase
-    .from('challenges')
-    .select('*')
-    .eq('user_id', userId)
-    .order('date_assigned', { ascending: false });
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+    }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ challenges: data });
+    // Fetch challenges for user
+    const { data: challenges, error: challengeError } = await supabase
+      .from('challenges')
+      .select(`
+        id,
+        name,
+        description,
+        type,
+        xp_reward,
+        difficulty,
+        completed,
+        failed,
+        created_at,
+        trick_id,
+        obstacle_id,
+        unlock_condition
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (challengeError) throw challengeError;
+
+    if (!challenges || challenges.length === 0) {
+      return NextResponse.json({ challenges: [] });
+    }
+
+    // Collect all trick and obstacle IDs to hydrate in bulk
+    const trickIds = [...new Set(challenges.map(c => c.trick_id).filter(Boolean))];
+    const obstacleIds = [...new Set(challenges.map(c => c.obstacle_id).filter(Boolean))];
+
+    // Fetch tricks
+    const { data: tricks, error: tricksError } = await supabase
+      .from('tricks')
+      .select('id, name, stance, tier');
+    if (tricksError) throw tricksError;
+
+    // Fetch obstacles
+   const { data: obstacles, error: obstaclesError } = await supabase
+    .from('obstacles')
+    .select(`
+      id,
+      name,
+      difficulty,
+      obstacle_type_id,
+      obstacle_types (
+        id,
+        name
+      )
+    `);
+    if (obstaclesError) throw obstaclesError;
+
+    // Merge into challenge objects
+    const enriched = challenges.map(challenge => {
+      const trick = tricks.find(t => t.id === challenge.trick_id);
+      const obstacle = obstacles.find(o => o.id === challenge.obstacle_id);
+
+      return {
+        ...challenge,
+        trick_name: trick?.name || null,
+        obstacle_name: obstacle?.name || null,
+        obstacle_type: obstacle?.obstacle_types?.name || null,
+      };
+    });
+
+    return NextResponse.json({ challenges: enriched });
+  } catch (err: any) {
+    console.error('Error fetching challenges:', err);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {

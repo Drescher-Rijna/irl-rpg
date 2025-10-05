@@ -28,11 +28,10 @@ export const generateInitialChallenge = (
     name: `Intro Challenge: ${trick.name}`,
     description: `Land ${trick.name} on ${obstacle.name} as many times as you can out of 10.`,
     type: "initial",
-    tier: trick.tier ?? 3, // start as tier 3 until proven otherwise
     difficulty: obstacle.difficulty,
     xp_reward: 50, // static reward for intro challenge
     unlock_condition: { type: "attempts", attempts: 10 },
-    is_completed: false,
+    completed: false,
   };
 };
 
@@ -84,12 +83,11 @@ export const generateDailyChallenges = (
       name: `Daily Challenge: ${trick.name}`,
       description,
       difficulty,
-      tier: trick.tier ?? 1,
       xp_reward: xp,
       type: 'daily',
       unlock_condition: unlock,
       obstacle_id: obstacle?.id,
-      is_completed: false,
+      completed: false,
     };
   };
 
@@ -105,7 +103,7 @@ export const generateDailyChallenges = (
 
 // --- LINE (from dailies, exclude tier 3) ---
 export const generateLineChallenge = (dailyChallenges: Challenge[]): Challenge | null => {
-  const pool = dailyChallenges.filter(c => c.tier < 3);
+  const pool = dailyChallenges.filter(c => (c.type === 'daily' && c.difficulty <= 3));
   if (pool.length < 2) return null;
 
   const pickRandom = <T>(arr: T[], count: number): T[] =>
@@ -118,13 +116,12 @@ export const generateLineChallenge = (dailyChallenges: Challenge[]): Challenge |
     trick_id: '',
     name: `Line Challenge: ${lineTricks.map(t => t.name.replace('Daily Challenge: ', '')).join(' → ')}`,
     description: `Land ${lineTricks.map(t => t.name.replace('Daily Challenge: ', '')).join(' into ')}`,
-    tier: Math.max(...lineTricks.map(t => t.tier)),
     difficulty: 3,
     xp_reward: 120,
     type: 'line',
     unlock_condition: { type: 'line', lineKey, tricks: lineTricks.map(t => t.trick_id) },
     obstacle_id: '',
-    is_completed: false,
+    completed: false,
   };
 };
 
@@ -172,12 +169,11 @@ export const generateBossChallenge = (
     name: `Boss Challenge: ${trick.name}`,
     description: `Defeat the Boss by landing ${trick.name} on a tougher obstacle (${harderObstacle.name}).`,
     type: "boss",
-    tier: trick.tier ?? 1,
     difficulty: harderObstacle.difficulty,
     xp_reward: 100 + (trick.tier ?? 1) * harderObstacle.difficulty,
     unlock_condition: { type: "boss", trick_id: trick.id, obstacle_id: harderObstacle.id },
     obstacle_id: harderObstacle.id,
-    is_completed: false,
+    completed: false,
   };
 };
 
@@ -208,12 +204,11 @@ export const generateComboChallenge = (
     name: `Combo Challenge: ${a.name} + ${b.name}`,
     description: `Land ${a.name} into ${b.name}.`,
     type: "combo",
-    tier: Math.max(a.tier ?? 1, b.tier ?? 1),
     difficulty: avgDifficulty,
     xp_reward: 100 + avgDifficulty * 10,
     unlock_condition: { type: "combo", comboKey, tricks: [a.id, b.id] },
     obstacle_id: "",
-    is_completed: false,
+    completed: false,
   };
 };
 

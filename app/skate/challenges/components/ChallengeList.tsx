@@ -28,9 +28,16 @@ export function ChallengeList() {
     try {
       const res = await fetch(`/api/challenges?userId=${user.id}`);
       const data = await res.json();
-      if (res.ok) setChallenges(data.challenges as Challenge[] || []);
+      console.log('Fetched challenges:', data);
+
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch challenges');
+
+      // Defensive: handle missing or malformed response
+      const fetchedChallenges = Array.isArray(data.challenges) ? data.challenges : [];
+      setChallenges(fetchedChallenges);
     } catch (err) {
       console.error('Challenge fetch failed:', err);
+      setChallenges([]); // fallback so UI doesn't break
     } finally {
       setLoading(false);
     }
@@ -98,25 +105,9 @@ export function ChallengeList() {
       case 'boss':
       case 'line':
       case 'combo':
-        const res = await fetch('/api/challenges/complete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, challengeId: challenge.id })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setChallenges(prev =>
-            prev.map(c => c.id === challenge.id ? { ...c, is_completed: true } : c)
-          );
-          setXPModalData({
-            earnedXP: data.earnedXP,
-            projectedXP: data.projectedXP || (user?.xp_current || 0) + data.earnedXP,
-            projectedLevel: data.level,
-            wildSlotAwarded: data.wildSlotAwarded || false
-          });
-        }
-        if (challenge.type === 'combo') setTrickModalData({ challengeId: challenge.id, challengeType: 'combo' });
-        break;
+      // For combos, open the modal. Complete route will be called by modal submit
+      setTrickModalData({ challengeId: challenge.id, challengeType: 'combo' });
+      break;
 
       default:
         console.warn('Unknown challenge type', challenge.type);
@@ -130,8 +121,8 @@ export function ChallengeList() {
     } catch (err) { console.error('Delete request failed:', err); }
   };
 
-  const activeChallenges = challenges.filter(c => !c.is_completed);
-  const completedChallenges = challenges.filter(c => c.is_completed);
+  const activeChallenges = challenges.filter(c => !c.completed);
+  const completedChallenges = challenges.filter(c => c.completed);
 
   if (loading) return <p>Loading challenges...</p>;
 

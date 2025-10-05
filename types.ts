@@ -38,13 +38,12 @@ export type Challenge = {
   type: 'daily' | 'boss' | 'line' | 'combo' | 'initial';
   name: string;
   description: string;
-  tier: number;
   difficulty: number;
   xp_reward: number;
   unlock_condition: any;
-  is_completed: boolean;
+  completed: boolean;
   failed?: boolean;
   trick_id?: string;
   obstacle_id?: string;
-  date_assigned?: string;
+  created_at?: string;
 };

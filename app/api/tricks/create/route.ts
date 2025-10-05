@@ -50,7 +50,7 @@ export async function POST(req: Request) {
         trick_id: trick.id,
         obstacle_id: landedObstacleId,
         name: `Initial Assessment: ${name}`,
-        description: `Land ${name} on this ${landedObstacle?.name} as many times as you can out of 10 attempts`,
+        description: `Land ${name} on ${landedObstacle?.name} as many times as you can out of 10 attempts`,
         type: 'initial',
         tier: 1,
         difficulty: landedObstacle?.difficulty || 1,
@@ -92,7 +92,6 @@ export async function POST(req: Request) {
           if (a.obstacle_type_id !== flatTypeId && b.obstacle_type_id === flatTypeId) return 1;
           return a.difficulty - b.difficulty;
         })[0];
-        console.log('Selected initial obstacle:', initialObstacle);
 
       // Step 4: Insert new initial challenge for the trick
       let { data: challengeData, error: challengeError } = await supabase
@@ -101,7 +100,7 @@ export async function POST(req: Request) {
           trick_id: trick.id,
           obstacle_id: initialObstacle.id,
           name: `Initial Assessment: ${name}`,
-          description: `Land ${name} on this ${initialObstacle.name} as many times as you can out of 10 attempts`,
+          description: `Land ${name} on ${initialObstacle.name} as many times as you can out of 10 attempts`,
           type: 'initial',
           difficulty: initialObstacle.difficulty || 1,
           xp_reward: 50,

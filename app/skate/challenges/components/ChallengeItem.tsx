@@ -1,20 +1,7 @@
 'use client';
 
 import React from 'react';
-
-type Challenge = {
-  id: string;
-  type: 'daily' | 'boss' | 'line' | 'combo' | 'initial';
-  name: string;
-  description: string;
-  tier: number;
-  difficulty: number;
-  xp_reward: number;
-  is_completed: boolean;
-  failed?: boolean;
-  trick_id?: string;
-  obstacle_id?: string;
-};
+import { Challenge } from '@/types';
 
 type ChallengeItemProps = {
   challenge: Challenge;
@@ -34,7 +21,7 @@ const ChallengeItem: React.FC<ChallengeItemProps> = ({ challenge, onComplete, on
   return (
     <div
       className={`border rounded-lg p-4 shadow-sm transition hover:shadow-md
-        ${challenge.is_completed ? 'bg-gray-50' : 'bg-white'}
+        ${challenge.completed ? 'bg-gray-50' : 'bg-white'}
         ${challenge.failed ? 'border-red-500' : 'border-gray-300'}
       `}
     >
@@ -51,13 +38,12 @@ const ChallengeItem: React.FC<ChallengeItemProps> = ({ challenge, onComplete, on
       <p className="text-sm text-gray-700 mb-2">{challenge.description}</p>
 
       <div className="flex justify-between text-sm text-gray-600 mb-2">
-        <span>Tier {challenge.tier}</span>
         <span>Difficulty {challenge.difficulty}</span>
         <span>XP: {challenge.xp_reward}</span>
       </div>
 
       <div className="flex gap-2">
-        {!challenge.is_completed && !challenge.failed && (
+        {!challenge.completed && !challenge.failed && (
           <button
             onClick={() => onComplete(challenge)}
             className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
@@ -65,7 +51,7 @@ const ChallengeItem: React.FC<ChallengeItemProps> = ({ challenge, onComplete, on
             Complete
           </button>
         )}
-        {(!challenge.is_completed && (challenge.type === 'combo' || challenge.type === 'line')) && (
+        {(!challenge.completed && (challenge.type === 'combo' || challenge.type === 'line')) && (
           <button
             onClick={() => onDelete(challenge.id)}
             className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"

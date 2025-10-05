@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useUserStore } from '@/store/useUserStore';
-import { fetchAllObstacleTypes } from '@/lib/obstacle';
 import Select from "react-select";
 
 type Obstacle = {
@@ -13,55 +12,50 @@ type Obstacle = {
 };
 
 type TrickCreationModalProps = {
-  defaultName: string;
+  challengeId: string;
+  type: string; // 'combo'
   onClose: () => void;
   onSuccess?: () => void;
 };
 
-export default function TrickCreationModal({ defaultName, onClose, onSuccess }: TrickCreationModalProps) {
+export default function TrickCreationModal({ challengeId, type, onClose, onSuccess }: TrickCreationModalProps) {
   const user = useUserStore((state) => state.user);
 
-   const [obstacleTypeOptions, setObstacleTypeOptions] = useState<{ value: string; label: string }[]>([]);
-  const [name, setName] = useState(defaultName);
+  const [name, setName] = useState('');
   const [stance, setStance] = useState<'regular' | 'switch' | 'nollie' | 'fakie'>('regular');
-  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
+  const [obstacleTypeOptions, setObstacleTypeOptions] = useState<{ value: string; label: string }[]>([]);
   const [obstacleTypes, setObstacleTypes] = useState<string[]>([]);
   const [landedType, setLandedType] = useState<string | null>(null);
   const [landedObstacleId, setLandedObstacleId] = useState<string | null>(null);
-
+  const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Fetch all obstacles from Supabase
+  // Fetch obstacles and types
   useEffect(() => {
     const fetchObstacles = async () => {
-      const res = await fetch('/api/obstacles'); // assumes you expose obstacles in API
+      const res = await fetch('/api/obstacles');
       const data = await res.json();
       if (res.ok) setObstacles(data);
     };
     fetchObstacles();
 
-    // Fetch obstacle types for select options
-     const loadObstacleTypes = async () => {
-        const types = await fetchAllObstacleTypes();
-        const options = types.map(t => ({ value: t.id, label: t.name }));
-        setObstacleTypeOptions(options);
-      };
-      loadObstacleTypes();
+    const fetchTypes = async () => {
+      const res = await fetch('/api/obstacle_types');
+      const data = await res.json();
+      if (res.ok) setObstacleTypeOptions(data.map((t: any) => ({ value: t.id, label: t.name })));
+    };
+    fetchTypes();
   }, []);
 
-  // Filtered obstacles based on landed type
   const filteredObstacles = landedType
-    ? obstacles.filter((o) => o.type === landedType)
+    ? obstacles.filter(o => o.type === landedType)
     : [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      setMessage('You must be logged in.');
-      return;
-    }
-    if (!name || obstacleTypes.length === 0 || !landedType || !landedObstacleId) {
+    if (!user?.id || !challengeId) return;
+    if (!name || !stance || obstacleTypes.length === 0 || !landedType || !landedObstacleId) {
       setMessage('Please fill all fields.');
       return;
     }
@@ -70,28 +64,36 @@ export default function TrickCreationModal({ defaultName, onClose, onSuccess }: 
     setMessage('');
 
     try {
-      const res = await fetch('/api/tricks/create', {
+      // Call complete route with trick data
+      const res = await fetch('/api/challenges/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
-          stance,
           userId: user.id,
-          obstacle_type_ids: obstacleTypes,
-          landed_type: landedType,
-          landedObstacleId,
-        }),
+          challengeId,
+          trickData: {
+            name,
+            stance,
+            obstacleTypeIds: obstacleTypes,
+            landedType,
+            landedObstacleId
+          }
+        })
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
 
-      setMessage('New combo trick created! Initial assessment added.');
-      if (onSuccess) onSuccess();
-      onClose();
-    } catch (err: any) {
+      if (res.ok) {
+        // XP modal data comes from complete route
+        onSuccess?.();
+        onClose();
+      } else {
+        console.error('Combo completion failed:', data.error);
+        setMessage(data.error || 'Something went wrong.');
+      }
+    } catch (err) {
       console.error(err);
-      setMessage(err.message || 'Something went wrong.');
+      setMessage('Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -102,7 +104,6 @@ export default function TrickCreationModal({ defaultName, onClose, onSuccess }: 
       <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-lg space-y-4 w-96">
         <h2 className="text-xl font-bold">Create Combo Trick</h2>
 
-        {/* Trick Name */}
         <input
           type="text"
           value={name}
@@ -111,7 +112,6 @@ export default function TrickCreationModal({ defaultName, onClose, onSuccess }: 
           className="w-full border rounded p-2"
         />
 
-        {/* Stance */}
         <select
           value={stance}
           onChange={e => setStance(e.target.value as any)}
@@ -123,7 +123,6 @@ export default function TrickCreationModal({ defaultName, onClose, onSuccess }: 
           <option value="fakie">Fakie</option>
         </select>
 
-        {/* Obstacle Types (multi) */}
         <div>
           <p className="font-medium mb-1">Select Obstacle Types</p>
           <Select
@@ -136,7 +135,6 @@ export default function TrickCreationModal({ defaultName, onClose, onSuccess }: 
           />
         </div>
 
-        {/* Landed Type */}
         <div>
           <p className="font-medium mb-1">Select Landed Type</p>
           <select
@@ -146,13 +144,12 @@ export default function TrickCreationModal({ defaultName, onClose, onSuccess }: 
             className="w-full border rounded p-2"
           >
             <option value="" disabled>Select landed type</option>
-            {obstacleTypes.map((t) => (
+            {obstacleTypes.map(t => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
         </div>
 
-        {/* Landed Obstacle */}
         <div>
           <p className="font-medium mb-1">Select Landed Obstacle</p>
           <select
@@ -163,24 +160,19 @@ export default function TrickCreationModal({ defaultName, onClose, onSuccess }: 
           >
             <option value="" disabled>Select obstacle</option>
             {filteredObstacles.map(o => (
-              <option key={o.id} value={o.id}>
-                {o.name} (diff {o.difficulty})
-              </option>
+              <option key={o.id} value={o.id}>{o.name} (diff {o.difficulty})</option>
             ))}
           </select>
         </div>
 
-        {/* Buttons */}
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 border rounded">
-            Cancel
-          </button>
+          <button type="button" onClick={onClose} className="px-4 py-2 border rounded">Cancel</button>
           <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded">
             {loading ? 'Saving...' : 'Save Trick'}
           </button>
         </div>
 
-        {message && <p className="text-sm text-green-600">{message}</p>}
+        {message && <p className="text-sm text-red-600">{message}</p>}
       </form>
     </div>
   );
