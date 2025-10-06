@@ -110,25 +110,17 @@ export const recalculateTrickTier = async (trickId: string) => {
   // Try canonical table first
   const { data: consistencies, error } = await supabase
     .from('trick_obstacle_consistencies')
-    .select('score, landed')
+    .select('score')
     .eq('trick_id', trickId);
 
   let rows = consistencies;
-  if (error || !rows) {
-    // fallback to legacy
-    const { data: legacy } = await supabase
-      .from('trick_consistency')
-      .select('score, landed')
-      .eq('trick_id', trickId);
-    rows = legacy || [];
-  }
 
   if (!rows || rows.length === 0) {
     console.debug('No consistency rows for trick:', trickId);
     return;
   }
 
-  const valid = (rows || []).filter((r: any) => r.landed && typeof r.score === 'number' && r.score > 0);
+  const valid = (rows || []).filter((r: any) => typeof r.score === 'number' && r.score > 0);
   if (valid.length === 0) {
     // No landed scores yet — optionally set tier to 3 or keep existing
     console.debug('No landed scored rows for trick:', trickId);
