@@ -107,32 +107,53 @@ export const calculateTier = (scores: number[]): number => {
  * Recalculate overall trick tier using only landed = true scores (and score > 0)
  */
 export const recalculateTrickTier = async (trickId: string) => {
-  // Try canonical table first
-  const { data: consistencies, error } = await supabase
-    .from('trick_obstacle_consistencies')
-    .select('score')
-    .eq('trick_id', trickId);
+  try {
+    // Fetch all consistency scores for all obstacles of this trick
+    const { data, error } = await supabase
+      .from('trick_obstacle_consistencies')
+      .select(`
+        score,
+        trick_obstacles!inner(trick_id)
+      `)
+      .eq('trick_obstacles.trick_id', trickId);
 
-  let rows = consistencies;
+    if (error) {
+      console.error('Error fetching consistencies:', error);
+      return;
+    }
 
-  if (!rows || rows.length === 0) {
-    console.debug('No consistency rows for trick:', trickId);
-    return;
+    if (!data || data.length === 0) {
+      console.debug(`No consistency records for trick ${trickId}`);
+      return;
+    }
+
+    // Filter valid numeric scores
+    const scores = data
+      .map((r: any) => r.score)
+      .filter((s: number | null) => typeof s === 'number' && s > 0);
+
+    if (scores.length === 0) {
+      console.debug(`No valid scores found for trick ${trickId}`);
+      return;
+    }
+
+    // Compute new tier based on consistency averages
+    const newTier = calculateTier(scores);
+
+    // Update trick record
+    const { error: updErr } = await supabase
+      .from('tricks')
+      .update({ tier: newTier })
+      .eq('id', trickId);
+
+    if (updErr) {
+      console.error('Failed to update trick tier:', updErr);
+    } else {
+      console.log(`✅ Updated trick ${trickId} → tier ${newTier}`);
+    }
+  } catch (err) {
+    console.error('Unexpected error in recalculateTrickTier:', err);
   }
-
-  const valid = (rows || []).filter((r: any) => typeof r.score === 'number' && r.score > 0);
-  if (valid.length === 0) {
-    // No landed scores yet — optionally set tier to 3 or keep existing
-    console.debug('No landed scored rows for trick:', trickId);
-    return;
-  }
-
-  const scores = valid.map((r: any) => r.score);
-  const newTier = calculateTier(scores);
-
-  const { error: updErr } = await supabase.from('tricks').update({ tier: newTier }).eq('id', trickId);
-  if (updErr) console.error('Failed to update trick tier:', updErr);
-  else console.log(`Updated trick ${trickId} -> tier ${newTier}`);
 };
 
 /**

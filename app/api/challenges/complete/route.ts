@@ -237,6 +237,7 @@ export async function POST(req: Request) {
       projectedLevel,
       projectedXP: projectedXPInLevel,
       wildSlotAwarded,
+      completed_at: new Date().toISOString(),
     });
   } catch (err) {
     console.error('Challenge completion error:', err);

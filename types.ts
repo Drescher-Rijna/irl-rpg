@@ -46,4 +46,5 @@ export type Challenge = {
   trick_id?: string;
   obstacle_id?: string;
   created_at?: string;
+  completed_at?: string | null;
 };

@@ -36,5 +36,7 @@ export const updateUserXP = (user: User, earnedXP: number) => {
 };
 
 export const xpForLevel = (level: number): number => {
-  return 100 + (level - 1) * 50; // XP required for this level
+  const base = 100; // XP for level 1
+  const growthRate = 1.08; // 8% more XP per level
+  return Math.floor(base * Math.pow(growthRate, level - 1));
 };

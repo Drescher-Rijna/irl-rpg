@@ -1,4 +1,19 @@
 import { Trick, Challenge, Obstacle } from '@/types';
+import { useUserStore } from '@/store/useUserStore';
+
+const playerLevel = useUserStore.getState().getLevel();
+
+const calculateXPReward = (
+  baseXP: number,
+  obstacleDifficulty: number = 1,
+  trickTier: number = 1,
+  playerLevel: number = 1,
+  multiplier: number = 1
+): number => {
+  const scaledBase = baseXP + trickTier * 10 + obstacleDifficulty * 8;
+  const levelBonus = 1 + 0.02 * playerLevel;
+  return Math.round(scaledBase * levelBonus * multiplier);
+};
 
 // --- INITIAL ---
 export const generateInitialChallenge = (
@@ -22,6 +37,8 @@ export const generateInitialChallenge = (
     flatCandidate || candidates.sort((a, b) => a.difficulty - b.difficulty)[0];
 
   // 3. Create intro challenge
+  const xp = calculateXPReward(40, obstacle.difficulty, trick.tier ?? 1, playerLevel, 0.8);
+
   return {
     trick_id: trick.id,
     obstacle_id: obstacle.id,
@@ -29,7 +46,7 @@ export const generateInitialChallenge = (
     description: `Land ${trick.name} on ${obstacle.name} as many times as you can out of 10.`,
     type: "initial",
     difficulty: obstacle.difficulty,
-    xp_reward: 50, // static reward for intro challenge
+    xp_reward: xp, // static reward for intro challenge
     unlock_condition: { type: "attempts", attempts: 10 },
     completed: false,
   };
@@ -46,37 +63,56 @@ export const generateDailyChallenges = (
   );
   if (!available.length) return [];
 
-  const tier1 = available.filter(t => t.tier === 1);
-  const tier2 = available.filter(t => t.tier === 2);
-  const tier3 = available.filter(t => t.tier === 3);
+  const candidates = available.flatMap(trick =>
+    (trick.obstacles || []).map(obstacle => ({
+      trick,
+      obstacle,
+      score: obstacle.score ?? 0,
+    }))
+  );
 
-  const tier1Count = Math.min(Math.ceil(totalChallenges * 0.7), tier1.length);
-  const tier2Count = Math.min(Math.ceil(totalChallenges * 0.2), tier2.length);
-  const tier3Count = Math.min(totalChallenges - tier1Count - tier2Count, tier3.length);
+  if (!candidates.length) return [];
 
-  const challenges: Challenge[] = [];
+ const highScore = candidates.filter(c => c.score >= 7);  // 70%
+  const midScore = candidates.filter(c => c.score >= 4 && c.score < 7); // 20%
+  const lowScore = candidates.filter(c => c.score < 4);    // 10%
 
-  const createDaily = (trick: Trick): Challenge => {
-    const obstacle = trick.obstacles?.[0];
-    const consistency = trick.consistency ?? 0;
+  const highCount = Math.min(Math.ceil(totalChallenges * 0.7), highScore.length);
+  const midCount = Math.min(Math.ceil(totalChallenges * 0.2), midScore.length);
+  const lowCount = Math.min(totalChallenges - highCount - midCount, lowScore.length);
 
-    let description: string;
-    let unlock: any;
-    let xp: number;
-    let difficulty: number;
+  // 4️⃣ Helper to pick random items
+  const pickRandom = <T>(arr: T[], count: number): T[] =>
+    arr.sort(() => Math.random() - 0.5).slice(0, count);
 
-    if (trick.consistency === undefined) {
-      description = `Attempt ${trick.name}${obstacle ? ` on ${obstacle.name}` : ''} 10 times and land at least 3`;
-      unlock = { type: 'attempts', attempts: 10, lands: 3 };
-      xp = 50;
-      difficulty = 1;
-    } else {
-      const target = Math.min(10, Math.ceil(consistency + 1));
-      description = `Land ${trick.name}${obstacle ? ` on ${obstacle.name}` : ''} ${target}/10 times`;
-      unlock = { type: 'consistency', target };
-      xp = 40 + target * 5;
-      difficulty = (trick.tier ?? 1) + (target > 7 ? 2 : 1);
-    }
+  const selected = [
+    ...pickRandom(highScore, highCount),
+    ...pickRandom(midScore, midCount),
+    ...pickRandom(lowScore, lowCount),
+  ];
+
+  // 5️⃣ Prevent duplicate tricks being used twice
+  const usedTricks = new Set<string>();
+  const uniqueSelected = selected.filter(({ trick }) => {
+    if (usedTricks.has(trick.id)) return false;
+    usedTricks.add(trick.id);
+    return true;
+  });
+
+  // 6️⃣ Create Challenge Objects
+  const challenges: Challenge[] = uniqueSelected.map(({ trick, obstacle, score }) => {
+    const consistency = score ?? 0;
+    const target = Math.min(10, Math.ceil(consistency + 1));
+
+    const description =
+      consistency < 3
+        ? `Try to land ${trick.name} on ${obstacle.name} at least 3 times out of 10`
+        : `Land ${trick.name} on ${obstacle.name} ${target}/10 times`;
+
+    const difficulty =
+      consistency >= 7 ? 3 : consistency >= 4 ? 2 : 1;
+
+    const xp = calculateXPReward(40, obstacle.difficulty, trick.tier ?? 1, playerLevel);
 
     return {
       trick_id: trick.id,
@@ -85,18 +121,11 @@ export const generateDailyChallenges = (
       difficulty,
       xp_reward: xp,
       type: 'daily',
-      unlock_condition: unlock,
-      obstacle_id: obstacle?.id,
+      unlock_condition: { type: 'consistency', target },
+      obstacle_id: obstacle.id,
       completed: false,
     };
-  };
-
-  const pickRandom = <T>(arr: T[], count: number): T[] =>
-    arr.sort(() => Math.random() - 0.5).slice(0, count);
-
-  challenges.push(...pickRandom(tier1, tier1Count).map(createDaily));
-  challenges.push(...pickRandom(tier2, tier2Count).map(createDaily));
-  challenges.push(...pickRandom(tier3, tier3Count).map(createDaily));
+  });
 
   return challenges.sort(() => Math.random() - 0.5);
 };
@@ -110,6 +139,13 @@ export const generateLineChallenge = (dailyChallenges: Challenge[]): Challenge |
     arr.sort(() => Math.random() - 0.5).slice(0, count);
 
   const lineTricks = pickRandom(pool, Math.min(3, pool.length));
+  const avgDifficulty =
+    lineTricks.reduce((acc, c) => acc + (c.difficulty ?? 1), 0) /
+    lineTricks.length;
+
+  // Line challenges give a higher multiplier
+  const xp = calculateXPReward(80, avgDifficulty, 2, playerLevel, 1.4);
+
   const lineKey = lineTricks.map(t => t.trick_id).sort().join('-');
 
   return {
@@ -117,7 +153,7 @@ export const generateLineChallenge = (dailyChallenges: Challenge[]): Challenge |
     name: `Line Challenge: ${lineTricks.map(t => t.name.replace('Daily Challenge: ', '')).join(' → ')}`,
     description: `Land ${lineTricks.map(t => t.name.replace('Daily Challenge: ', '')).join(' into ')}`,
     difficulty: 3,
-    xp_reward: 120,
+    xp_reward: xp,
     type: 'line',
     unlock_condition: { type: 'line', lineKey, tricks: lineTricks.map(t => t.trick_id) },
     obstacle_id: '',
@@ -164,13 +200,15 @@ export const generateBossChallenge = (
 
   if (!harderObstacle) return null;
 
+  const xp = calculateXPReward(100, harderObstacle.difficulty, trick.tier ?? 1, playerLevel, 1.5);
+
   return {
     trick_id: trick.id,
     name: `Boss Challenge: ${trick.name}`,
-    description: `Defeat the Boss by landing ${trick.name} on a tougher obstacle (${harderObstacle.name}).`,
+    description: `Land ${trick.name} on a (${harderObstacle.name}).`,
     type: "boss",
     difficulty: harderObstacle.difficulty,
-    xp_reward: 100 + (trick.tier ?? 1) * harderObstacle.difficulty,
+    xp_reward: xp,
     unlock_condition: { type: "boss", trick_id: trick.id, obstacle_id: harderObstacle.id },
     obstacle_id: harderObstacle.id,
     completed: false,
@@ -195,9 +233,11 @@ export const generateComboChallenge = (
   const [a, b] = pool.sort(() => Math.random() - 0.5).slice(0, 2);
 
   const avgDifficulty =
-    (a.obstacles[0].difficulty + b.obstacles[0].difficulty) / 2 * 1.2;
+    Math.round((a.obstacles[0].difficulty + b.obstacles[0].difficulty) / 2 * 1.2);
 
   const comboKey = [a.id, b.id].sort().join("-");
+
+  const xp = calculateXPReward(80, avgDifficulty, 2, playerLevel, 1.3);
 
   return {
     trick_id: "",

@@ -8,61 +8,63 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { userId } = body;
     if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+    console.log(1)
 
     // 1️⃣ Fetch tricks with obstacles
-    const { data: tricksData, error: tricksError } = await supabase
-      .from('tricks')
-      .select(`
+const { data: tricksData, error: tricksError } = await supabase
+  .from('tricks')
+  .select(`
+    id,
+    name,
+    tier,
+    trick_obstacles (
+      id,
+      obstacle_id,
+      obstacles (
         id,
         name,
-        tier,
-        trick_obstacles (
-          obstacle_id,
-          obstacles (id, name, type, difficulty)
-        )
-      `);
-    if (tricksError) throw tricksError;
+        obstacle_type_id,
+        difficulty
+      )
+    )
+  `).eq('user_id', userId);
 
-    // 2️⃣ Fetch consistency separately
-    const { data: consistencyData, error: consistencyError } = await supabase
-      .from('trick_consistency')
-      .select('trick_id, obstacle_id, score');
-    if (consistencyError) throw consistencyError;
+if (tricksError) throw tricksError;
 
-    // 3️⃣ Merge consistency into tricks
+const { data: consistencyData, error: consistencyError } = await supabase
+  .from('trick_obstacle_consistencies')
+  .select('trick_obstacle_id, score')
+  .eq('user_id', userId);
+
+if (consistencyError) throw consistencyError;
+
     const tricks = tricksData.map(trick => {
-  const relatedConsistency = consistencyData.filter(c => c.trick_id === trick.id);
-  const avgConsistency = relatedConsistency.length
-    ? relatedConsistency.reduce((sum, c) => sum + c.score, 0) / relatedConsistency.length
-    : 0;
+  const obstacles: Obstacle[] = trick.trick_obstacles?.map(to => {
+    const obstacle = to.obstacles;
+    const consistency = consistencyData.find(c => c.trick_obstacle_id === to.id);
 
-  // Flatten obstacles from trick_obstacles
-  const obstacles: Obstacle[] =
-    trick.trick_obstacles?.map(to => {
-      // Find the corresponding obstacle
-      const obstacle = to.obstacles.find(o => o.id === to.obstacle_id);
-      if (!obstacle) return null; // Skip if no matching obstacle
+    return {
+      id: obstacle.id,
+      name: obstacle.name,
+      obstacle_type_id: obstacle.obstacle_type_id,
+      difficulty: obstacle.difficulty,
+      score: consistency?.score ?? 0,
+    } as Obstacle;
+  }) || [];
 
-      // Find the related consistency score
-      const consistencyScore = relatedConsistency.find(c => c.obstacle_id === to.obstacle_id)?.score ?? 0;
+  const avgConsistency =
+    obstacles.length > 0
+      ? obstacles.reduce((sum, o) => sum + (o.score ?? 0), 0) / obstacles.length
+      : 0;
 
-      return {
-        id: obstacle.id,
-        name: obstacle.name,
-        type: obstacle.type,
-        difficulty: obstacle.difficulty,
-        score: consistencyScore,
-      } as Obstacle;
-    }).filter((o): o is Obstacle => o !== null) || []
-  
-     return {
-      id: trick.id,
-      name: trick.name,
-      tier: trick.tier ?? undefined,
-      consistency: avgConsistency,
-      obstacles,
-    } as Trick;
-  });
+  return {
+    id: trick.id,
+    name: trick.name,
+    tier: trick.tier,
+    consistency: avgConsistency,
+    obstacles,
+  } as Trick;
+});
 
     // 4️⃣ Fetch existing challenges for user
     const { data: existing, error: existingError } = await supabase
@@ -77,10 +79,10 @@ export async function POST(req: Request) {
     const MAX_COMBO = 2;
     const MAX_BOSS = 1;
 
-    const dailyCount = existing?.filter(c => c.type === 'daily' && !c.is_completed).length ?? 0;
-    const lineCount = existing?.filter(c => c.type === 'line' && !c.is_completed).length ?? 0;
-    const comboCount = existing?.filter(c => c.type === 'combo' && !c.is_completed).length ?? 0;
-    const bossCount = existing?.filter(c => c.type === 'boss' && !c.is_completed).length ?? 0;
+    const dailyCount = existing?.filter(c => c.type === 'daily' && !c.completed).length ?? 0;
+    const lineCount = existing?.filter(c => c.type === 'line' && !c.completed).length ?? 0;
+    const comboCount = existing?.filter(c => c.type === 'combo' && !c.completed).length ?? 0;
+    const bossCount = existing?.filter(c => c.type === 'boss' && !c.completed).length ?? 0;
 
     const newChallenges = [];
 
@@ -90,13 +92,13 @@ const existingDailyTrickIds: string[] = (existing
   ?.filter(c => c.type === 'daily' && !c.completed && c.created_at === today)
   .map(c => c.trick_id)
   .filter((id): id is string => !!id)) || [];    /* const existingLineTrickIds = existing
-      .filter(c => c.type === 'line' && !c.is_completed)
+      .filter(c => c.type === 'line' && !c.completed)
       .map(c => c.trick_id);
     const existingComboTrickIds = existing
-      .filter(c => c.type === 'combo' && !c.is_completed)
+      .filter(c => c.type === 'combo' && !c.completed)
       .map(c => c.trick_id); */
 const existingBossTrickIds: string[] = existing
-  ?.filter(c => c.type === 'boss' && !c.is_completed)
+  ?.filter(c => c.type === 'boss' && !c.completed)
   .map(c => c.trick_id)
   .filter((id): id is string => !!id) || [];
   
